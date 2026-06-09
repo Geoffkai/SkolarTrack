@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lesson 1 — How Senior Engineers Start a Project</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #6c63ff;
+      --accent-dim: #3d3880;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --code-bg: #0d1117;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      padding: 2rem 1rem;
+    }
+
+    .container { max-width: 780px; margin: 0 auto; }
+
+    .badge {
+      display: inline-block;
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      margin-bottom: 1rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+      margin-bottom: 2.5rem;
+    }
+
+    h2 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-top: 2.5rem;
+      margin-bottom: 1rem;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    h2 .num {
+      background: var(--accent-dim);
+      color: var(--accent);
+      width: 1.8rem;
+      height: 1.8rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      font-weight: 900;
+      flex-shrink: 0;
+    }
+
+    p { margin-bottom: 1rem; }
+
+    .callout {
+      border-left: 3px solid var(--accent);
+      background: var(--surface);
+      padding: 1rem 1.25rem;
+      border-radius: 0 8px 8px 0;
+      margin: 1.5rem 0;
+    }
+
+    .callout.warning { border-left-color: var(--yellow); }
+    .callout.success { border-left-color: var(--green); }
+    .callout.danger  { border-left-color: var(--red); }
+
+    .callout strong { display: block; margin-bottom: 0.35rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      background: var(--code-bg);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      font-size: 0.88em;
+      color: #a5f3fc;
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      overflow-x: auto;
+      margin: 1rem 0 1.5rem;
+      font-size: 0.88rem;
+      line-height: 1.6;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: inherit;
+      color: var(--text);
+    }
+
+    .pipeline {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 1.5rem 0;
+    }
+
+    .pipeline-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      position: relative;
+    }
+
+    .pipeline-step:first-child { border-radius: 8px 8px 0 0; }
+    .pipeline-step:last-child  { border-radius: 0 0 8px 8px; }
+    .pipeline-step + .pipeline-step { border-top: none; }
+
+    .step-num {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 900;
+      font-size: 0.8rem;
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 0.1rem;
+    }
+
+    .step-content strong { display: block; margin-bottom: 0.15rem; }
+    .step-content span { color: var(--muted); font-size: 0.9rem; }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    @media (max-width: 600px) { .comparison { grid-template-columns: 1fr; } }
+
+    .comparison-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+    }
+
+    .comparison-card.bad  { border-top: 3px solid var(--red); }
+    .comparison-card.good { border-top: 3px solid var(--green); }
+
+    .comparison-card .label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+    }
+
+    .comparison-card.bad  .label { color: var(--red); }
+    .comparison-card.good .label { color: var(--green); }
+
+    .comparison-card li {
+      list-style: none;
+      padding: 0.2rem 0;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .comparison-card.bad  li::before { content: "✗ "; color: var(--red); }
+    .comparison-card.good li::before { content: "✓ "; color: var(--green); }
+
+    .quiz-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin: 2.5rem 0;
+    }
+
+    .quiz-section h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 1.25rem;
+    }
+
+    .quiz-q {
+      margin-bottom: 1.5rem;
+    }
+
+    .quiz-q p {
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      font-size: 0.95rem;
+    }
+
+    .options {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .option {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      text-align: left;
+      width: 100%;
+      color: var(--text);
+      font-size: 0.93rem;
+      line-height: 1.4;
+    }
+
+    .option:hover { border-color: var(--accent); background: var(--surface); }
+    .option.correct { border-color: var(--green); background: #052e16; }
+    .option.wrong   { border-color: var(--red);   background: #1f0606; }
+    .option.reveal  { border-color: var(--green); background: #052e16; opacity: 0.65; }
+
+    .option-letter {
+      font-weight: 700;
+      color: var(--muted);
+      flex-shrink: 0;
+      font-family: monospace;
+      font-size: 0.85rem;
+      padding-top: 0.05rem;
+    }
+
+    .feedback {
+      margin-top: 0.75rem;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      display: none;
+    }
+
+    .feedback.correct-msg { background: #052e16; color: var(--green); border: 1px solid #166534; }
+    .feedback.wrong-msg   { background: #1f0606; color: #fca5a5;     border: 1px solid #7f1d1d; }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .ask-prompt {
+      background: var(--surface);
+      border: 1px solid var(--accent-dim);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-top: 2rem;
+      font-size: 0.9rem;
+    }
+
+    .tag { display: inline-block; background: var(--accent-dim); color: var(--accent); font-size: 0.75rem; font-weight: 700; padding: 0.1rem 0.5rem; border-radius: 4px; margin-right: 0.25rem; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="badge">Lesson 1 · SkolarTrack</div>
+  <h1>How Senior Engineers Start a Project</h1>
+  <p class="subtitle">The exact mental model and order of operations they use — and why beginners do it backwards.</p>
+
+  <!-- THE CORE LESSON -->
+
+  <h2><span class="num">1</span> The Mistake Beginners Always Make</h2>
+
+  <p>When most beginners get a project spec, they immediately open their code editor and ask: <em>"What should I build first?"</em> Then they start with whatever feels most visible — usually a login page, or the homepage UI.</p>
+
+  <div class="callout danger">
+    <strong>The trap</strong>
+    Building UI before your backend works means you're building on nothing. You'll spend hours on a beautiful login form that has nowhere to send the data. Then you'll have to throw it away and rebuild it once the API exists.
+  </div>
+
+  <p>Senior engineers invert this. They ask: <em>"What does everything else depend on?"</em> Then they build that first. For SkolarTrack, that ordering looks like this:</p>
+
+  <div class="pipeline">
+    <div class="pipeline-step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <strong>Database schema</strong>
+        <span>Lock the tables before writing any code. Everything — your API, your auth, your frontend — depends on the shape of the data.</span>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <strong>Project skeleton + environment</strong>
+        <span>Folder structure, package.json, .env — the scaffold that holds everything. Do this once, right.</span>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <strong>Server + DB connection</strong>
+        <span>GET /health returns { status: "ok" } and you can query the database. Proof the wiring works before you build anything on top of it.</span>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <strong>Auth (register + login)</strong>
+        <span>JWT auth first, because every protected route depends on it. Don't build scholarships CRUD before you know who's asking.</span>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">5</div>
+      <div class="step-content">
+        <strong>Backend features (API routes)</strong>
+        <span>Scholarships CRUD, Applications CRUD — all tested with Thunder Client. Backend is complete and proven before React exists.</span>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">6</div>
+      <div class="step-content">
+        <strong>React frontend</strong>
+        <span>Now build the UI. You're not guessing what the API looks like — you know, because you built it. Every API call is a known quantity.</span>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">7</div>
+      <div class="step-content">
+        <strong>Deploy</strong>
+        <span>Railway (backend) → Vercel (frontend). Deploy early, deploy often. Don't make "deploy" a scary final boss.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout success">
+    <strong>The principle</strong>
+    Build from the foundation up. Data layer → server layer → API layer → client layer. Each layer has a stable foundation underneath it before you start.
+  </div>
+
+  <!-- SECTION 2 -->
+
+  <h2><span class="num">2</span> The Day 1 Checklist (Your Actual First Day)</h2>
+
+  <p>Here's what a senior engineer does on Day 1 of a project like SkolarTrack — not Day 7, not Day 3. Day 1.</p>
+
+  <pre><code># Day 1 goal: server running, database connected, /health responds
+
+1. Confirm your schema is locked (it is — scholarship-tracker-ph.md has it)
+2. Create the Neon.tech database and get the DATABASE_URL
+3. Set up the project folder structure:
+   SkolarTrack/
+     server/
+       index.js
+       src/
+         app.js
+         routes/
+         controllers/
+         models/
+         middleware/
+     client/   ← leave empty for now
+4. npm init in server/, install: express pg dotenv
+5. Write index.js (calls app.listen only)
+6. Write app.js (Express setup, mounts routes)
+7. Connect to Neon.tech in app.js using pg
+8. Create GET /health route — returns { status: "ok", db: "connected" }
+9. Run the server. Hit /health in Thunder Client.
+10. If it responds — Day 1 is done. Commit.</code></pre>
+
+  <p>That's it. No login page. No React. No scholarships. Just a server that talks to a database. That single working foundation is worth more than a half-built feature.</p>
+
+  <div class="callout warning">
+    <strong>Why commit at the end of Day 1?</strong>
+    Git is your undo button. Senior engineers commit whenever they reach a <em>working state</em> — not when a feature is "done." Day 1 working state = server + DB connection. Commit it with a clear message: <code>feat: Express server + Neon.tech connection, /health endpoint</code>
+  </div>
+
+  <!-- SECTION 3 -->
+
+  <h2><span class="num">3</span> Schema First — Always</h2>
+
+  <p>Your project doc already has the schema. This is rare and valuable. Most junior devs start coding and discover their schema was wrong on Day 8. You've already done the design thinking. Don't skip it — <em>run it.</em></p>
+
+  <p>Before writing a single route, create your tables on Neon.tech. Open the Neon SQL editor and paste:</p>
+
+  <pre><code>CREATE TABLE users (
+  id            SERIAL PRIMARY KEY,
+  email         VARCHAR UNIQUE NOT NULL,
+  password_hash VARCHAR NOT NULL,
+  role          VARCHAR CHECK (role IN ('admin', 'student')),
+  name          VARCHAR,
+  course        VARCHAR,
+  school        VARCHAR,
+  created_at    TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE scholarships (
+  id            SERIAL PRIMARY KEY,
+  posted_by     INTEGER REFERENCES users(id),
+  title         VARCHAR NOT NULL,
+  organization  VARCHAR NOT NULL,
+  description   TEXT,
+  amount        NUMERIC,
+  slots         INTEGER,
+  requirements  TEXT,
+  deadline      DATE NOT NULL,
+  status        VARCHAR CHECK (status IN ('open', 'closed')) DEFAULT 'open',
+  created_at    TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE applications (
+  id             SERIAL PRIMARY KEY,
+  student_id     INTEGER REFERENCES users(id),
+  scholarship_id INTEGER REFERENCES scholarships(id),
+  status         VARCHAR CHECK (status IN ('interested','applied','interview','result')),
+  notes          TEXT,
+  updated_at     TIMESTAMP DEFAULT NOW()
+);</code></pre>
+
+  <p>Once the tables exist, your models have something to query. Order matters.</p>
+
+  <!-- SECTION 4 -->
+
+  <h2><span class="num">4</span> The Senior vs Junior Comparison</h2>
+
+  <div class="comparison">
+    <div class="comparison-card bad">
+      <div class="label">Junior approach</div>
+      <ul>
+        <li>Opens VS Code, starts with the login page UI</li>
+        <li>Hardcodes fake data to make it "look real"</li>
+        <li>Builds the full UI, then tries to wire the backend</li>
+        <li>Realizes the schema doesn't match the UI</li>
+        <li>Rewrites half the frontend and half the backend</li>
+        <li>Gives up or ships something broken</li>
+      </ul>
+    </div>
+    <div class="comparison-card good">
+      <div class="label">Senior approach</div>
+      <ul>
+        <li>Reads the spec, locks the schema first</li>
+        <li>Builds the server skeleton — no UI yet</li>
+        <li>Tests every API route with Thunder Client</li>
+        <li>Backend is proven before React is touched</li>
+        <li>Frontend just calls known, working endpoints</li>
+        <li>Ships something that actually works end-to-end</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- SECTION 5 -->
+
+  <h2><span class="num">5</span> Your Architecture is Already Decided — Follow It</h2>
+
+  <p>CLAUDE.md has your architecture locked in. A senior engineer would recognize this as a gift. You don't have to decide structure on the fly. Every file has a job:</p>
+
+  <pre><code>server/index.js       → ONLY: app.listen(PORT)
+server/src/app.js     → Express setup, middleware, mount routes
+server/src/routes/    → Maps HTTP verb + path to a controller function
+server/src/controllers/ → Reads req, calls model, sends res
+server/src/models/    → ALL SQL queries. Nothing else.
+server/src/middleware/ → auth.js (verify JWT), roles.js (check role)</code></pre>
+
+  <div class="callout">
+    <strong>The rule that keeps code clean</strong>
+    Never write SQL in a controller. Never write <code>req</code>/<code>res</code> logic in a model. If you find yourself doing either, stop — you're in the wrong file. This separation is what makes bugs easy to find and code easy to change later.
+  </div>
+
+  <!-- QUIZ -->
+
+  <div class="quiz-section">
+    <h3>Quick Check — test yourself</h3>
+
+    <div class="quiz-q" id="q1">
+      <p>Q1. You're starting SkolarTrack today. What's the correct first action?</p>
+      <div class="options">
+        <button class="option" onclick="answer(this, 'q1', false)"><span class="option-letter">A</span> Build the Login page in React so you can see something working</button>
+        <button class="option" onclick="answer(this, 'q1', false)"><span class="option-letter">B</span> Write the /auth/register route in Express</button>
+        <button class="option" onclick="answer(this, 'q1', true)"><span class="option-letter">C</span> Create the 3 tables on Neon.tech and confirm they exist</button>
+        <button class="option" onclick="answer(this, 'q1', false)"><span class="option-letter">D</span> Design the UI mockups in Figma</button>
+      </div>
+      <div class="feedback" id="q1-fb"></div>
+    </div>
+
+    <div class="quiz-q" id="q2">
+      <p>Q2. You've written a controller that runs a SQL query directly. What's wrong?</p>
+      <div class="options">
+        <button class="option" onclick="answer(this, 'q2', false)"><span class="option-letter">A</span> Nothing — controllers can have SQL if it's simple</button>
+        <button class="option" onclick="answer(this, 'q2', true)"><span class="option-letter">B</span> SQL belongs in models only — move it there</button>
+        <button class="option" onclick="answer(this, 'q2', false)"><span class="option-letter">C</span> SQL should be in routes, not controllers</button>
+        <button class="option" onclick="answer(this, 'q2', false)"><span class="option-letter">D</span> Controllers can't import anything — SQL won't run</button>
+      </div>
+      <div class="feedback" id="q2-fb"></div>
+    </div>
+
+    <div class="quiz-q" id="q3">
+      <p>Q3. What does a working "Day 1" look like for SkolarTrack?</p>
+      <div class="options">
+        <button class="option" onclick="answer(this, 'q3', false)"><span class="option-letter">A</span> Login and Register pages render in the browser</button>
+        <button class="option" onclick="answer(this, 'q3', false)"><span class="option-letter">B</span> POST /auth/register successfully creates a user</button>
+        <button class="option" onclick="answer(this, 'q3', true)"><span class="option-letter">C</span> GET /health returns { status: "ok" } and DB tables exist on Neon</button>
+        <button class="option" onclick="answer(this, 'q3', false)"><span class="option-letter">D</span> The full scholarships listing page shows dummy data</button>
+      </div>
+      <div class="feedback" id="q3-fb"></div>
+    </div>
+  </div>
+
+  <!-- WHAT'S NEXT -->
+
+  <h2><span class="num">6</span> What's Next After This Lesson</h2>
+
+  <p>The next lesson covers <strong>setting up the Express server skeleton and connecting to Neon.tech</strong> — the actual hands-on Day 1 work. You'll write the files, run the server, and hit <code>/health</code> for the first time.</p>
+
+  <p>Before that lesson, your one action item:</p>
+
+  <div class="callout success">
+    <strong>Your task right now</strong>
+    Go to <a href="https://neon.tech" style="color: var(--accent);">neon.tech</a>, create a free account, create a project called "skolartrack", copy your <code>DATABASE_URL</code> connection string, and paste it into <code>server/.env</code>. That's the only thing standing between you and a working Day 1.
+  </div>
+
+  <!-- ASK PROMPT -->
+
+  <div class="ask-prompt">
+    💬 <strong>Ask your mentor anything.</strong> Confused about why the schema comes before the routes? Want to know what <code>pg</code> actually does? Unsure what Thunder Client is? Ask Claude — that's what it's here for. The questions you ask now prevent the confusion that kills momentum on Day 3.
+  </div>
+
+  <footer>
+    <p>
+      <span class="tag">Lesson 1 of ~14</span>
+      SkolarTrack — Career Deployment Pipeline · Project 1 · Full Stack CRUD
+    </p>
+    <p style="margin-top: 0.5rem;">References: <a href="https://expressjs.com/en/guide/routing.html" style="color: var(--accent);">Express Routing Guide</a> · <a href="https://neon.tech/docs/introduction" style="color: var(--accent);">Neon.tech Docs</a> · <a href="https://node-postgres.com/" style="color: var(--accent);">node-postgres (pg)</a></p>
+  </footer>
+
+</div>
+
+<script>
+  const explanations = {
+    q1: {
+      correct: "Correct. The schema is the foundation everything else is built on. Tables must exist before you can write routes that query them. This is the most important sequencing decision in the whole project.",
+      wrong: {
+        A: "A beautiful login page with no backend is just a picture. You'd have to rebuild it once the API exists. Start with data.",
+        B: "Close — auth routes are early, but the DB tables need to exist first or the route has nothing to INSERT into.",
+        D: "Mockups are useful for planning, but the schema doc already defines the data shape. Skip Figma — you have everything you need."
+      }
+    },
+    q2: {
+      correct: "Correct. Controllers handle req/res. Models handle SQL. The rule is absolute. A controller with SQL in it is harder to test, harder to reuse, and harder to debug.",
+      wrong: {
+        A: "This is how bugs hide. 'Simple' SQL in controllers today becomes messy SQL in controllers tomorrow. The rule has no exceptions.",
+        C: "Routes only map paths to controllers — they're not even close to the right place for SQL.",
+        D: "Controllers can import anything — but that doesn't make it right. The architecture rule is about separation of concerns, not technical ability."
+      }
+    },
+    q3: {
+      correct: "Exactly right. Day 1 is about proof of infrastructure — can the server start, can it talk to the database. Nothing more. Build on a verified foundation.",
+      wrong: {
+        A: "React comes on Day 9. Building UI on Day 1 means you're building on nothing.",
+        B: "Register is Day 3 work. Auth routes depend on the DB connection being stable first.",
+        D: "Dummy data is a trap — it feels like progress but it's not real. Build systems, not illusions."
+      }
+    }
+  };
+
+  function answer(btn, qId, isCorrect) {
+    const q = document.getElementById(qId);
+    const allOpts = q.querySelectorAll('.option');
+    const fb = document.getElementById(qId + '-fb');
+
+    // Prevent re-answering
+    if (q.dataset.answered) return;
+    q.dataset.answered = "true";
+
+    allOpts.forEach(opt => opt.disabled = true);
+
+    const letter = btn.querySelector('.option-letter').textContent;
+    const expl = explanations[qId];
+
+    if (isCorrect) {
+      btn.classList.add('correct');
+      fb.className = 'feedback correct-msg';
+      fb.textContent = '✓ ' + expl.correct;
+    } else {
+      btn.classList.add('wrong');
+      fb.className = 'feedback wrong-msg';
+      fb.textContent = '✗ ' + (expl.wrong[letter] || 'Not quite. Think about what each layer depends on.');
+      // Reveal correct answer
+      allOpts.forEach(opt => {
+        if (opt.onclick.toString().includes('true')) opt.classList.add('reveal');
+      });
+    }
+    fb.style.display = 'block';
+  }
+</script>
+</body>
+</html>

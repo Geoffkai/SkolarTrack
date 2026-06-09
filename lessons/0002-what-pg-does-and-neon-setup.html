@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lesson 2 — What pg Does & How to Use Neon.tech</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #6c63ff;
+      --accent-dim: #3d3880;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --code-bg: #0d1117;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg); color: var(--text);
+      line-height: 1.7; padding: 2rem 1rem;
+    }
+    .container { max-width: 780px; margin: 0 auto; }
+    .badge {
+      display: inline-block; background: var(--accent-dim); color: var(--accent);
+      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; padding: 0.25rem 0.75rem;
+      border-radius: 999px; margin-bottom: 1rem;
+    }
+    h1 { font-size: 2rem; font-weight: 800; line-height: 1.2; margin-bottom: 0.5rem; }
+    .subtitle { color: var(--muted); font-size: 1.05rem; margin-bottom: 2.5rem; }
+    h2 {
+      font-size: 1.2rem; font-weight: 700; margin-top: 2.5rem; margin-bottom: 1rem;
+      color: var(--accent); display: flex; align-items: center; gap: 0.5rem;
+    }
+    h2 .num {
+      background: var(--accent-dim); color: var(--accent);
+      width: 1.8rem; height: 1.8rem; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem; font-weight: 900; flex-shrink: 0;
+    }
+    p { margin-bottom: 1rem; }
+    .callout {
+      border-left: 3px solid var(--accent); background: var(--surface);
+      padding: 1rem 1.25rem; border-radius: 0 8px 8px 0; margin: 1.5rem 0;
+    }
+    .callout.success { border-left-color: var(--green); }
+    .callout.warning { border-left-color: var(--yellow); }
+    .callout.danger  { border-left-color: var(--red); }
+    .callout strong { display: block; margin-bottom: 0.35rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      background: var(--code-bg); padding: 0.15em 0.4em;
+      border-radius: 4px; font-size: 0.88em; color: #a5f3fc;
+    }
+    pre {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 1.25rem; overflow-x: auto;
+      margin: 1rem 0 1.5rem; font-size: 0.88rem; line-height: 1.6;
+    }
+    pre code { background: none; padding: 0; font-size: inherit; color: var(--text); }
+    .comment { color: #6a737d; }
+    .kw  { color: #ff7b72; }
+    .str { color: #a5d6ff; }
+    .fn  { color: #d2a8ff; }
+    .num-c { color: #79c0ff; }
+
+    /* Step-by-step */
+    .steps { display: flex; flex-direction: column; gap: 1px; margin: 1.5rem 0; }
+    .step {
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 1rem 1.25rem; display: flex; gap: 1rem; align-items: flex-start;
+    }
+    .step:first-child { border-radius: 8px 8px 0 0; }
+    .step:last-child  { border-radius: 0 0 8px 8px; }
+    .step + .step { border-top: none; }
+    .step-n {
+      background: var(--accent); color: #fff; font-weight: 900; font-size: 0.8rem;
+      width: 1.6rem; height: 1.6rem; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 0.1rem;
+    }
+    .step-body strong { display: block; margin-bottom: 0.2rem; }
+    .step-body span   { color: var(--muted); font-size: 0.9rem; }
+
+    /* Visual diagram */
+    .diagram {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.5rem; margin: 1.5rem 0;
+      text-align: center; font-size: 0.9rem;
+    }
+    .diagram .row { display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0; }
+    .box {
+      background: var(--accent-dim); color: var(--accent);
+      border: 1px solid var(--accent); border-radius: 6px;
+      padding: 0.4rem 0.9rem; font-weight: 700; font-size: 0.85rem;
+    }
+    .box.db { background: #052e16; color: var(--green); border-color: var(--green); }
+    .arrow { color: var(--muted); font-size: 1.2rem; }
+
+    /* Quiz */
+    .quiz-section {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.5rem; margin: 2.5rem 0;
+    }
+    .quiz-section h3 { font-size: 1rem; font-weight: 700; margin-bottom: 1.25rem; }
+    .quiz-q { margin-bottom: 1.5rem; }
+    .quiz-q p { font-weight: 600; margin-bottom: 0.75rem; font-size: 0.95rem; }
+    .options { display: flex; flex-direction: column; gap: 0.5rem; }
+    .option {
+      display: flex; align-items: flex-start; gap: 0.75rem;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 0.75rem 1rem; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+      text-align: left; width: 100%; color: var(--text); font-size: 0.93rem; line-height: 1.4;
+    }
+    .option:hover { border-color: var(--accent); background: var(--surface); }
+    .option.correct { border-color: var(--green); background: #052e16; }
+    .option.wrong   { border-color: var(--red);   background: #1f0606; }
+    .option.reveal  { border-color: var(--green); background: #052e16; opacity: 0.65; }
+    .option-letter  { font-weight: 700; color: var(--muted); flex-shrink: 0; font-family: monospace; font-size: 0.85rem; padding-top: 0.05rem; }
+    .feedback { margin-top: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.9rem; display: none; }
+    .feedback.correct-msg { background: #052e16; color: var(--green); border: 1px solid #166534; }
+    .feedback.wrong-msg   { background: #1f0606; color: #fca5a5;     border: 1px solid #7f1d1d; }
+
+    footer { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }
+    .ask-prompt { background: var(--surface); border: 1px solid var(--accent-dim); border-radius: 8px; padding: 1rem 1.25rem; margin-top: 2rem; font-size: 0.9rem; }
+    .tag { display: inline-block; background: var(--accent-dim); color: var(--accent); font-size: 0.75rem; font-weight: 700; padding: 0.1rem 0.5rem; border-radius: 4px; margin-right: 0.25rem; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="badge">Lesson 2 · SkolarTrack</div>
+  <h1>What <code>pg</code> Does — and How to Use Neon.tech</h1>
+  <p class="subtitle">The bridge between your Express server and your PostgreSQL database, explained clearly.</p>
+
+  <!-- SECTION 1 -->
+  <h2><span class="num">1</span> The Problem pg Solves</h2>
+
+  <p>Your Express server runs on Node.js. Your database runs on Neon.tech (PostgreSQL). These are two completely separate programs, potentially on different computers. How does Node.js talk to PostgreSQL?</p>
+
+  <p>It can't — not directly. Node.js doesn't know how to speak PostgreSQL's protocol. That's exactly what <strong><code>pg</code></strong> (node-postgres) does: it's the translator.</p>
+
+  <div class="diagram">
+    <div class="row">
+      <div class="box">Your Express server<br><small style="font-weight:400;color:var(--muted)">Node.js, running locally</small></div>
+      <div class="arrow">→</div>
+      <div class="box" style="background:#1a0a2e;color:#c084fc;border-color:#c084fc;">pg<br><small style="font-weight:400;color:var(--muted)">the translator</small></div>
+      <div class="arrow">→</div>
+      <div class="box db">Neon.tech<br><small style="font-weight:400;color:var(--muted)">PostgreSQL, in the cloud</small></div>
+    </div>
+    <p style="color:var(--muted);font-size:0.82rem;margin-top:1rem;">pg handles the connection, sends your SQL over the internet, and gives you the results back as JavaScript objects.</p>
+  </div>
+
+  <p>You write normal JavaScript. You write normal SQL. <code>pg</code> handles everything in between — opening a network connection, sending the query, parsing the response, and returning rows as a JavaScript array you can use.</p>
+
+  <!-- SECTION 2 -->
+  <h2><span class="num">2</span> Pool vs Client — Which One You Use</h2>
+
+  <p><code>pg</code> gives you two ways to connect: <code>Client</code> and <code>Pool</code>.</p>
+
+  <p><strong>Client</strong> = one connection, you manage it manually. You connect, use it, disconnect. If you forget to disconnect, you leak a connection. Don't use this in a web server.</p>
+
+  <p><strong>Pool</strong> = a managed group of connections. You ask the pool for a connection when you need one, use it, and it goes back automatically. Multiple requests can be handled simultaneously. <strong>This is what you use.</strong></p>
+
+  <div class="callout success">
+    <strong>Rule for SkolarTrack</strong>
+    Always use <code>Pool</code>. Create one pool when the server starts, export it, import it in your models. Never create new connections per request.
+  </div>
+
+  <!-- SECTION 3 -->
+  <h2><span class="num">3</span> Setting It Up — Step by Step</h2>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-n">1</div>
+      <div class="step-body">
+        <strong>Install pg and dotenv in your server folder</strong>
+        <span>Run this in your terminal from inside the <code>server/</code> folder</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">2</div>
+      <div class="step-body">
+        <strong>Get your DATABASE_URL from Neon.tech</strong>
+        <span>Dashboard → your project → Connection Details → copy the "Connection string"</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">3</div>
+      <div class="step-body">
+        <strong>Paste it into server/.env</strong>
+        <span>This file is already gitignored — it never goes to GitHub</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">4</div>
+      <div class="step-body">
+        <strong>Create server/src/db.js — your pool file</strong>
+        <span>This is the one file that creates the pool. Everything else imports from here.</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">5</div>
+      <div class="step-body">
+        <strong>Use pool.query() in your models</strong>
+        <span>One line. Returns a promise. Rows are in <code>result.rows</code>.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 4 -->
+  <h2><span class="num">4</span> The Actual Code</h2>
+
+  <p><strong>Step 1 — Install (run in terminal, inside <code>server/</code>):</strong></p>
+  <pre><code>npm install pg dotenv</code></pre>
+
+  <p><strong>Step 2 &amp; 3 — Your <code>server/.env</code> file:</strong></p>
+  <pre><code><span class="comment"># Paste the connection string from Neon.tech dashboard here</span>
+DATABASE_URL=postgresql://username:password@ep-something.us-east-2.aws.neon.tech/neondb?sslmode=require
+JWT_SECRET=some-long-random-string-here
+PORT=3000
+JWT_EXPIRES_IN=7d</code></pre>
+
+  <div class="callout warning">
+    <strong>The ?sslmode=require part is important</strong>
+    Neon.tech requires SSL. Your connection string from Neon will already include it. Don't remove it.
+  </div>
+
+  <p><strong>Step 4 — Create <code>server/src/db.js</code>:</strong></p>
+  <pre><code><span class="kw">const</span> { Pool } = <span class="fn">require</span>(<span class="str">'pg'</span>);
+<span class="fn">require</span>(<span class="str">'dotenv'</span>).config();
+
+<span class="kw">const</span> pool = <span class="kw">new</span> <span class="fn">Pool</span>({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: <span class="kw">false</span> }  <span class="comment">// Required for Neon.tech</span>
+});
+
+module.exports = pool;</code></pre>
+
+  <p>That's the whole file. One pool, exported. Now any model can import it.</p>
+
+  <p><strong>Step 5 — Using pool.query() in a model (example: <code>server/src/models/userModel.js</code>):</strong></p>
+  <pre><code><span class="kw">const</span> pool = <span class="fn">require</span>(<span class="str">'../db'</span>);
+
+<span class="comment">// Find a user by email</span>
+<span class="kw">const</span> findByEmail = <span class="kw">async</span> (email) => {
+  <span class="kw">const</span> result = <span class="kw">await</span> pool.<span class="fn">query</span>(
+    <span class="str">'SELECT * FROM users WHERE email = $1'</span>,
+    [email]   <span class="comment">// $1 gets replaced with this value — prevents SQL injection</span>
+  );
+  <span class="kw">return</span> result.rows[<span class="num-c">0</span>];  <span class="comment">// rows is an array; [0] = first match</span>
+};
+
+module.exports = { findByEmail };</code></pre>
+
+  <div class="callout">
+    <strong>What is $1?</strong>
+    Instead of writing <code>'...WHERE email = ' + email</code> (dangerous — SQL injection!), you use <code>$1</code> as a placeholder and pass the real value in the second argument as an array. <code>pg</code> safely substitutes it. Always do this for any user-supplied data.
+  </div>
+
+  <p><strong>What <code>result</code> looks like</strong> — when you <code>await pool.query()</code>, you get back an object:</p>
+  <pre><code>{
+  rows: [
+    { id: 1, email: <span class="str">'juan@example.com'</span>, role: <span class="str">'student'</span>, name: <span class="str">'Juan'</span> }
+  ],
+  rowCount: <span class="num-c">1</span>,
+  <span class="comment">// ...other pg metadata you mostly don't need</span>
+}</code></pre>
+
+  <p>Your data is always in <code>result.rows</code>. It's a plain JavaScript array of objects, where each object is one row and each key is a column name.</p>
+
+  <!-- SECTION 5 -->
+  <h2><span class="num">5</span> The /health Route That Proves It Works</h2>
+
+  <p>Once <code>db.js</code> exists, wire a <code>/health</code> route that actually queries the database. This is your proof that the whole chain works.</p>
+
+  <p><strong><code>server/src/app.js</code> — simplified skeleton:</strong></p>
+  <pre><code><span class="kw">const</span> express = <span class="fn">require</span>(<span class="str">'express'</span>);
+<span class="kw">const</span> pool    = <span class="fn">require</span>(<span class="str">'./db'</span>);
+<span class="fn">require</span>(<span class="str">'dotenv'</span>).config();
+
+<span class="kw">const</span> app = <span class="fn">express</span>();
+app.<span class="fn">use</span>(express.<span class="fn">json</span>());
+
+app.<span class="fn">get</span>(<span class="str">'/health'</span>, <span class="kw">async</span> (req, res) => {
+  <span class="kw">try</span> {
+    <span class="kw">await</span> pool.<span class="fn">query</span>(<span class="str">'SELECT 1'</span>);  <span class="comment">// Simplest possible query — just checks connection</span>
+    res.<span class="fn">json</span>({ status: <span class="str">'ok'</span>, db: <span class="str">'connected'</span> });
+  } <span class="kw">catch</span> (err) {
+    res.<span class="fn">status</span>(<span class="num-c">500</span>).<span class="fn">json</span>({ status: <span class="str">'error'</span>, message: err.message });
+  }
+});
+
+module.exports = app;</code></pre>
+
+  <p><strong><code>server/index.js</code> — entry point only:</strong></p>
+  <pre><code><span class="fn">require</span>(<span class="str">'dotenv'</span>).config();
+<span class="kw">const</span> app  = <span class="fn">require</span>(<span class="str">'./src/app'</span>);
+<span class="kw">const</span> PORT = process.env.PORT || <span class="num-c">3000</span>;
+
+app.<span class="fn">listen</span>(PORT, () => {
+  console.<span class="fn">log</span>(<span class="str">`Server running on port ${PORT}`</span>);
+});</code></pre>
+
+  <p>Run it with <code>node index.js</code> from inside <code>server/</code>. Then open Thunder Client and hit <code>GET http://localhost:3000/health</code>. You should see:</p>
+
+  <pre><code>{ <span class="str">"status"</span>: <span class="str">"ok"</span>, <span class="str">"db"</span>: <span class="str">"connected"</span> }</code></pre>
+
+  <div class="callout success">
+    <strong>If you see this — Day 1 is done</strong>
+    Your server is running. Your database is connected. You can build everything else on top of this. Commit it immediately.
+  </div>
+
+  <!-- SECTION 6: File map -->
+  <h2><span class="num">6</span> Where Each File Lives</h2>
+
+  <pre><code>server/
+  index.js          ← entry point — calls app.listen()
+  .env              ← your secrets, never commit this
+  .env.example      ← safe template, shows what vars are needed
+  src/
+    app.js          ← Express setup, /health route for now
+    db.js           ← creates and exports the pg Pool ← NEW
+    routes/         ← (empty for now)
+    controllers/    ← (empty for now)
+    models/         ← (empty for now, userModel.js comes next)
+    middleware/     ← (empty for now)</code></pre>
+
+  <!-- QUIZ -->
+  <div class="quiz-section">
+    <h3>Quick Check — test yourself</h3>
+
+    <div class="quiz-q" id="q1">
+      <p>Q1. You call <code>pool.query('SELECT * FROM users')</code>. Where are the rows in the result?</p>
+      <div class="options">
+        <button class="option" onclick="answer(this,'q1',false)"><span class="option-letter">A</span> result.data</button>
+        <button class="option" onclick="answer(this,'q1',true)"><span class="option-letter">B</span> result.rows</button>
+        <button class="option" onclick="answer(this,'q1',false)"><span class="option-letter">C</span> result.results</button>
+        <button class="option" onclick="answer(this,'q1',false)"><span class="option-letter">D</span> result[0]</button>
+      </div>
+      <div class="feedback" id="q1-fb"></div>
+    </div>
+
+    <div class="quiz-q" id="q2">
+      <p>Q2. Why do you use <code>$1</code> instead of directly embedding a variable in the SQL string?</p>
+      <div class="options">
+        <button class="option" onclick="answer(this,'q2',false)"><span class="option-letter">A</span> It runs faster</button>
+        <button class="option" onclick="answer(this,'q2',false)"><span class="option-letter">B</span> pg requires this syntax — it won't accept template literals</button>
+        <button class="option" onclick="answer(this,'q2',true)"><span class="option-letter">C</span> It prevents SQL injection — pg safely escapes the value</button>
+        <button class="option" onclick="answer(this,'q2',false)"><span class="option-letter">D</span> It makes the query easier to read</button>
+      </div>
+      <div class="feedback" id="q2-fb"></div>
+    </div>
+
+    <div class="quiz-q" id="q3">
+      <p>Q3. You have 10 API routes that all need to query the database. How many Pool instances do you create?</p>
+      <div class="options">
+        <button class="option" onclick="answer(this,'q3',false)"><span class="option-letter">A</span> One per route — each route manages its own connection</button>
+        <button class="option" onclick="answer(this,'q3',true)"><span class="option-letter">B</span> One — created in db.js, imported wherever needed</button>
+        <button class="option" onclick="answer(this,'q3',false)"><span class="option-letter">C</span> One per model file</button>
+        <button class="option" onclick="answer(this,'q3',false)"><span class="option-letter">D</span> One per request — create it, use it, destroy it</button>
+      </div>
+      <div class="feedback" id="q3-fb"></div>
+    </div>
+  </div>
+
+  <!-- NEXT LESSON -->
+  <h2><span class="num">7</span> What's Next</h2>
+
+  <p>Lesson 3 will be <strong>building the auth routes</strong> — <code>POST /auth/register</code> and <code>POST /auth/login</code>. You'll hash passwords with bcrypt, issue JWTs, and test everything in Thunder Client.</p>
+
+  <p>Your action for this lesson:</p>
+
+  <div class="callout success">
+    <strong>Do this now</strong>
+    1. Run <code>npm install pg dotenv</code> inside <code>server/</code><br>
+    2. Create <code>server/src/db.js</code> with the Pool code above<br>
+    3. Paste your Neon.tech connection string into <code>server/.env</code><br>
+    4. Write the <code>/health</code> route in <code>app.js</code><br>
+    5. Run <code>node index.js</code> and hit <code>GET localhost:3000/health</code> in Thunder Client<br>
+    6. See <code>{ "status": "ok", "db": "connected" }</code> — then commit
+  </div>
+
+  <div class="ask-prompt">
+    💬 <strong>Ask your mentor anything.</strong> Getting an SSL error? Connection refused? Not sure where to find the connection string on Neon? Ask Claude — paste the exact error message and you'll get a direct answer.
+  </div>
+
+  <footer>
+    <p>
+      <span class="tag">Lesson 2 of ~14</span>
+      SkolarTrack — Career Deployment Pipeline · Project 1 · Full Stack CRUD
+    </p>
+    <p style="margin-top: 0.5rem;">References: <a href="https://node-postgres.com/apis/pool">node-postgres Pool API</a> · <a href="https://neon.tech/docs/connect/connect-from-any-app">Neon.tech — Connect from any app</a> · <a href="https://node-postgres.com/features/queries#parameterized-query">Parameterized queries (SQL injection prevention)</a></p>
+  </footer>
+
+</div>
+
+<script>
+  const explanations = {
+    q1: {
+      correct: "Correct. pg always puts your rows in result.rows — it's a plain array of JavaScript objects, one object per database row.",
+      wrong: { A: "result.data doesn't exist in pg. Always result.rows.", C: "result.results doesn't exist. It's result.rows.", D: "result[0] would give you something internal to pg's result object, not your data." }
+    },
+    q2: {
+      correct: "Exactly right. If you did WHERE email = '" + "' + userInput + '", a malicious user could type SQL code and break your database — or worse, dump it. $1 with a params array makes pg escape it safely.",
+      wrong: { A: "Performance is not the reason. Security is.", B: "pg does accept template literals in queries — but you should never use them with user data.", D: "Readability is a side benefit, but the real reason is security." }
+    },
+    q3: {
+      correct: "One pool, created once in db.js, shared everywhere. The pool internally manages multiple connections — you don't manage them manually.",
+      wrong: { A: "This would open a new connection per request — slow, wasteful, and will hit Neon's connection limit fast.", C: "One pool total, not per model file. Create it once, import the same instance everywhere.", D: "Never create and destroy pools per request. The pool's job is to persist and reuse connections." }
+    }
+  };
+
+  function answer(btn, qId, isCorrect) {
+    const q = document.getElementById(qId);
+    if (q.dataset.answered) return;
+    q.dataset.answered = "true";
+    q.querySelectorAll('.option').forEach(o => o.disabled = true);
+    const letter = btn.querySelector('.option-letter').textContent;
+    const fb = document.getElementById(qId + '-fb');
+    const expl = explanations[qId];
+    if (isCorrect) {
+      btn.classList.add('correct');
+      fb.className = 'feedback correct-msg';
+      fb.textContent = '✓ ' + expl.correct;
+    } else {
+      btn.classList.add('wrong');
+      fb.className = 'feedback wrong-msg';
+      fb.textContent = '✗ ' + (expl.wrong[letter] || 'Not quite.');
+      q.querySelectorAll('.option').forEach(o => {
+        if (o.onclick.toString().includes(',true)')) o.classList.add('reveal');
+      });
+    }
+    fb.style.display = 'block';
+  }
+</script>
+</body>
+</html>
