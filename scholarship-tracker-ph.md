@@ -122,7 +122,8 @@ applications (
   scholarship_id INTEGER REFERENCES scholarships(id),
   status         VARCHAR CHECK (status IN ('interested','applied','interview','result')),
   notes          TEXT,
-  updated_at     TIMESTAMP DEFAULT NOW()
+  updated_at     TIMESTAMP DEFAULT NOW(),
+  UNIQUE (student_id, scholarship_id)
 )
 ```
 
