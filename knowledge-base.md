@@ -28,6 +28,10 @@
 17. [Middleware, `express.json()`, and `app.use()`](#lesson-17-middleware-and-appuse)
 18. [HTTP Verbs & What a Route Is](#lesson-18-http-verbs-and-routes)
 19. [Password Hashing & bcrypt (Salt, Cost Factor)](#lesson-19-password-hashing-and-bcrypt)
+20. [JWT Deep Dive: How Signing & Verifying Actually Work](#lesson-20-jwt-deep-dive)
+21. [The Controller & Route Layers (MVC in Practice)](#lesson-21-controller-and-route-layers)
+22. [HTTP Status Codes](#lesson-22-http-status-codes)
+23. [Debugging: Reading Errors & Making the Server Tell the Truth](#lesson-23-debugging)
 ---
  
 ## Lesson 1: MySQL vs PostgreSQL
@@ -713,6 +717,236 @@ const isMatch = await bcrypt.compare(plainPassword, storedHash);
 - **JWT** proves *who's logged in* on each request. Different jobs. (JWT = next lesson.)
 ---
  
+## Lesson 20: JWT Deep Dive
+ 
+**Date learned:** 2026-07
+**Tags:** `jwt` `jwt-secret` `auth` `security` `signing` `verifying`
+ 
+The second half of auth. Hashing protects *stored passwords*; JWT proves *who's logged in* on every request after login. Different jobs.
+ 
+### JWT vs JWT_SECRET — the #1 confusion, settled
+ 
+They are NOT the same kind of thing. **The secret is the stamp; the JWT is the stamped pass.**
+ 
+| | `JWT_SECRET` | a JWT (the token) |
+|---|---|---|
+| What it is | The private stamp (a tool) | A stamped pass / ID card |
+| How many | **One**, fixed forever | **Many** — a new one per login |
+| Where it lives | `.env`, server only | Handed to user, lives in their browser (`localStorage`) |
+| Who can see it | Only your server | Anyone holding the token |
+| Travels to the user? | **NEVER** — stays home always | Yes, that's its whole job |
+ 
+The secret is **never inside the token** and never sent anywhere. It's the tool that signs; the signature (the mark it leaves) goes in the token, but the tool itself stays on the server.
+ 
+### A JWT = one login session, not one user
+ 
+- `jwt.sign()` runs **every time someone logs in by typing their credentials**, and every run makes a fresh token.
+- Same user logging in twice = two different tokens. Token = a session, not a person.
+- "Automatic login" tomorrow isn't a new login — the **browser reused the token it saved** in `localStorage`. The password screen only reappears when there's no valid token (never had one, or it expired per `JWT_EXPIRES_IN=7d`).
+### Made FROM the data, signed BY the secret (precise wording)
+ 
+Two ingredients, two jobs:
+- **Data** (e.g. `{ userId: 7, role: "student" }`) = the raw material the token is *made of*. Makes each token unique to each person.
+- **`JWT_SECRET`** = the tool that *signs* it. Makes the token un-forgeable. Does NOT become part of the content.
+```javascript
+jwt.sign(
+  { userId: 7, role: "student" },   // ingredient 1: the DATA (the "from")
+  process.env.JWT_SECRET            // ingredient 2: the SECRET (the "by")
+)  // → returns the finished JWT
+```
+Read it as: *"Sign this data, using this secret."* Not "made from the secret" — made from the data, signed by the secret.
+ 
+### How verification works (the deepest, most important part)
+ 
+The server does **not** store signatures or "remember" tokens. It **recomputes and compares.**
+ 
+- **Signing (at login):** `data + JWT_SECRET → [HMAC-SHA256 math] → signature`. The signature is attached as the token's 3rd part.
+- **Verifying (later request):**
+  1. Read the data part of the incoming token (the payload is public/base64 — readable by anyone, that's fine).
+  2. Run the **same math** with the server's **own** secret → the signature it *expects*.
+  3. **Compare** expected vs the signature attached to the token.
+     - Match → signed with this same secret → genuine → allow.
+     - No match → different secret or tampered data → fake → reject **401**.
+**Why a faker can't win:** they don't have the secret, so their math produces a different signature for `{ role: "admin" }`. The math is one-way — you can't work backwards from a signature to the secret. Only the real secret reproduces the right signature for the same data.
+ 
+> The magic isn't that the token "knows" which stamp signed it. It's that **only the real secret reproduces the same signature for the same data.** Same secret + same data = same signature, every time.
+ 
+You don't need HMAC-SHA256's internals — `jwt.verify()` does it all in one line. Knowing it *recomputes-and-compares* is the understanding that matters.
+ 
+### The two functions, two places (ties to the build)
+ 
+| Function | Where it runs | Job |
+|---|---|---|
+| `jwt.sign(payload, secret, options)` | inside **login** route | mint the token, hand it to the user |
+| `jwt.verify(token, secret)` | inside **auth middleware** | check the token on every protected request |
+ 
+JWT is stateless: the server keeps **no list** of logged-in users or issued tokens. Everything it needs is inside the token the client hands back. That's why it scales and why it's the industry default.
+ 
+---
+ 
+## Lesson 21: Controller and Route Layers
+ 
+**Date learned:** 2026-07-01
+**Tags:** `mvc` `controller` `route` `express-router` `architecture` `separation-of-concerns`
+ 
+Building the register feature completed the three-layer picture. The **model** (SQL) was already understood; this adds the two layers above it and how a request travels through all three.
+ 
+### The three layers as office roles (recap + extend)
+ 
+| Layer | Role | Its one job | Touches DB? | Touches req/res? |
+|---|---|---|---|---|
+| **Route** | Receptionist | Match method + path → point to a function | No | No |
+| **Controller** | Caseworker / brain | Read the request, decide the steps, make decisions, call the model, write the response | No (asks the model) | **Yes** |
+| **Model** | Records clerk | Only SQL — fetch/file records when asked | **Yes** | No |
+ 
+### Why the controller exists (why not cram it into the route)
+ 
+Each layer changes for a **different reason** — that's the whole point:
+- Swap Neon for another database → only the **model** changes.
+- Change a business rule (e.g. also send a welcome email on register) → only the **controller** changes.
+- Rename the URL `/auth/register` → `/signup` → only the **route** changes.
+All the "if this, then that" logic (validation, which status code to send) lives in the **controller**. The model makes zero decisions (it just fetches); the route makes zero decisions (it just points). This is **separation of concerns** — CLAUDE.md's *"never write SQL in controllers, never write req/res in models"* rule, and now the *why*.
+ 
+### `express.Router()` — the mini-app
+ 
+- `app.get(...)` directly on `app` was fine for one route, but cramming every route into `app.js` gets messy.
+- `express.Router()` = a **mini-app / clipboard** to group related routes (all the `/auth` ones) into their own file, then clip the whole file onto the main app in one line.
+- Capital-R `Router` = a tool Express hands you (same idea as `Pool` from `pg`).
+```javascript
+const router = express.Router();
+router.post("/register", register);   // register has NO () — hand over the function, don't call it now
+module.exports = router;
+```
+ 
+### Mounting: prefix + suffix = full path
+ 
+```
+app.use("/auth", authRoutes)    ← prefix:  /auth
+router.post("/register", ...)   ← suffix:  /register
+                                  ─────────────────
+             final address:       POST /auth/register
+```
+ 
+The route file only says `/register`, **not** `/auth/register` — the `/auth` part is added by the mounting in `app.js`. (Same mechanism as Lesson 17's `app.use("/admin", ...)`.)
+ 
+### Two directions: build order vs request flow
+ 
+| | Order |
+|---|---|
+| The order you **build** | db → model → controller → route (**bottom-up**, Lesson 9) |
+| The order a request **travels** | route → controller → model → db (**top-down**) |
+ 
+You build the floor before the roof, but a visitor enters through the roof. Both pictures are true.
+ 
+### Vertical slice
+ 
+Register was built as **one feature down through all its layers** (model → controller → route), not "all models, then all controllers." That's a **vertical slice** — you get a working, testable feature sooner instead of three half-finished layers. Industry-preferred.
+ 
+### The layering is near-universal
+ 
+Node: route → controller → model. Spring: controller → service → repository. Laravel (PH market): controller → service → model. Same idea everywhere. It fits **CRUD web apps** (most of the PH junior market) — but it's not a universal law for *all* software (data pipelines, games, ML scripts organize differently).
+ 
+> One line: **the model knows *how* to reach the database, the route knows *which* function to call, and the controller knows *what* should happen.**
+ 
+---
+ 
+## Lesson 22: HTTP Status Codes
+ 
+**Date learned:** 2026-07-01
+**Tags:** `http` `status-codes` `rest` `api` `express`
+ 
+Every server reply carries a **3-digit status code** — the server's one-word verdict on the request, sent alongside the data. It's a universal language: every client agrees on the meaning, so it can react to the *number alone* before reading the body.
+ 
+### The one insight: the first digit = the family
+ 
+| First digit | Family | Plain meaning | Whose fault? |
+|---|---|---|---|
+| **2xx** | Success | "It worked." | ✅ all good |
+| **4xx** | Client error | "*You* sent something wrong." | 👈 the caller |
+| **5xx** | Server error | "*I* broke on my end." | 👉 the server |
+ 
+(`1xx`/`3xx` exist — skip for now.) The **4xx vs 5xx** split is debugging gold: **4xx = fix your request, 5xx = fix your server.** The first digit tells you which side to look at.
+ 
+### The specific ones (mapped to the register controller)
+ 
+| Code | Name | Means | In the register controller |
+|---|---|---|---|
+| **200** | OK | Generic success | `/health` sends this |
+| **201** | Created | Success **and** something new was made | register succeeded, a user now exists |
+| **400** | Bad Request | Caller sent missing/invalid input | `email`/`password`/`role` missing |
+| **409** | Conflict | Request clashes with current state | that email is already registered |
+| **500** | Internal Server Error | The server itself broke | the `catch` block |
+| **401** | Unauthorized | Not logged in / bad token | *coming with JWT middleware — the "student hits admin route → 401" rule* |
+ 
+`201` vs `200`: both are success, but `201` specifically says "I created a new resource." Using it on register (not a generic `200`) is the kind of precision interviewers notice.
+ 
+### Why they're used like that
+ 
+The client **reacts to the number automatically, without reading the message.** The React frontend will branch on it: `201` → go to login; `409` → show "email taken"; `400` → "fill in all fields." The code is a **contract** ("409 always means conflict"), so the frontend can trust it without parsing English error text.
+ 
+> One line: **first digit = family (2 worked, 4 your fault, 5 my fault); the specific number = exactly what happened; the client reacts to the number alone.**
+ 
+---
+ 
+## Lesson 23: Debugging
+ 
+**Date learned:** 2026-07-01
+**Tags:** `debugging` `stack-trace` `errors` `middleware` `nodemon` `troubleshooting`
+ 
+Getting register to work meant fighting through a *chain* of errors. Each one taught a reusable debugging move. This lesson is the **methodology**, not just the fixes.
+ 
+### 1. Read the stack trace — find *your* file
+ 
+A stack trace is a list of "who called who," top to bottom. **Most lines are inside `node_modules` — skip them.** Find the first line naming a file *you* wrote (e.g. `authRoutes.js:5:8`). That's the cause; the `node_modules` lines are just where the error *surfaced*.
+ 
+### 2. Shape mismatch — `require` must match `module.exports` (the braces)
+ 
+- `module.exports = { register }` puts the function **in a box**.
+- `const { register } = require(...)` **opens the box**, takes it out. ✅
+- `const register = require(...)` grabs the **whole box** and mislabels it. ❌ → `register` is the object, not the function.
+Destructuring a missing property returns `undefined` **silently** — the crash happens one line *later*.
+> **Tell:** `TypeError: argument handler must be a function` on a route = the import is `undefined`/wrong shape → check the braces match on both sides.
+ 
+### 3. Middleware order = execution order
+ 
+`app.use(...)` runs top to bottom. `express.json()` **must be registered before** any route that reads `req.body`. If routes sit above it, the body is still sealed when the route runs.
+> **Tell:** `Cannot destructure property 'email' of 'req.body' as it is undefined` = `express.json()` is missing or below the routes — *or* the body isn't tagged as JSON (see #5).
+ 
+### 4. The running process is a snapshot — restart to run new code
+ 
+Node reads your files **once at boot** and runs that copy in memory. Editing files on disk does **not** change the already-running process — you must **restart** to re-read them. That's the whole reason nodemon exists (auto-restart on save). **If a correct fix changes nothing, suspect stale code:**
+- Confirm the file is **saved** (a ● dot instead of ✕ = unsaved → Ctrl+S).
+- Confirm nodemon printed `restarting due to changes`.
+- Force it: type `rs` + Enter in the terminal, or Ctrl+C then `npm run dev`.
+- **OneDrive folders can break file-watchers** → manual `rs` is the reliable fallback. (Long term: keep projects out of OneDrive.)
+### 5. When you can't see the request, LOG it (the move that cracked it)
+ 
+When fixes to provably-correct code do nothing, **stop guessing — make the server report reality.** Temporary logging middleware, right after `express.json()`:
+ 
+```javascript
+app.use((req, res, next) => {
+  console.log("→ Content-Type:", req.headers["content-type"]);
+  console.log("→ req.body:", req.body);
+  next();
+});
+```
+ 
+This revealed `Content-Type: text/plain` — the *real* bug. `express.json()` **only parses bodies tagged `application/json`**; a `text/plain` body passes through untouched → `req.body` undefined. Root cause: Thunder Client's Body tab was set to **Text**, not **JSON**. Fix: Body → **JSON** (and/or add header `Content-Type: application/json`). **Delete the debug middleware afterward.**
+> "Log what's actually arriving" is one of the most powerful debugging tools you have.
+ 
+### The meta-lesson: eliminate suspects one file at a time
+ 
+Every backend file was confirmed correct one by one (routes → controller → app.js → index.js) until the only thing left was the *request itself*. **When the code is provably right, the problem is data, config, or environment — not code.**
+ 
+### Bonus gotchas caught this session
+ 
+- **`bcrypt.hash` is async** → you **must** `await` it, or you store a pending Promise (`"[object Promise]"`) instead of the hash.
+- **`process.env.PORT` is case-sensitive** — `.env` has `PORT`, so lowercase `process.env.port` reads `undefined` (it only "worked" by falling back to `3000`).
+- **The `pg` SSL warning** (`SSL modes ... treated as aliases for verify-full`) is a harmless **future-change warning**, not an error — it comes from the `pg` library, not your code. Optional fix: change `?sslmode=require` → `?sslmode=verify-full` in `DATABASE_URL`. Fine to ignore for a student project.
+> One line: **read the trace to your own file; match `require`/`exports` shapes; order middleware before its routes; restart to run new code; and when stuck, log what's actually arriving.**
+ 
+---
+ 
 ## Quick Reference Cheatsheet
  
 ### Key Terms at a Glance
@@ -735,6 +969,22 @@ const isMatch = await bcrypt.compare(plainPassword, storedHash);
 | `JWT_SECRET` | Secret key your server uses to sign and verify login tokens |
 | `PORT` | Which port your local server runs on — use 3000 |
 | `JWT_EXPIRES_IN` | How long a login token stays valid before expiring |
+| `express.Router()` | A mini-app for grouping related routes in their own file |
+| Controller | The "brain" layer — decides steps, makes decisions, the only layer touching req/res |
+| `Content-Type` | Header telling the server the body's format; `express.json()` only parses `application/json` |
+ 
+### HTTP Status Codes at a Glance
+ 
+| Code | Meaning | Family |
+|---|---|---|
+| 200 OK | Generic success | 2xx ✅ |
+| 201 Created | Success + new resource made | 2xx ✅ |
+| 400 Bad Request | Missing/invalid input | 4xx (your fault) |
+| 401 Unauthorized | Not logged in / bad token | 4xx (your fault) |
+| 409 Conflict | Clashes with current state (e.g. duplicate) | 4xx (your fault) |
+| 500 Internal Server Error | The server broke | 5xx (server fault) |
+ 
+> First digit = family: **2** worked · **4** your (client's) fault · **5** my (server's) fault.
  
 ### SQL Syntax Differences: MySQL → PostgreSQL
  
@@ -748,5 +998,5 @@ const isMatch = await bcrypt.compare(plainPassword, storedHash);
  
 ---
  
-*Last updated: 2026-07-01 (Lessons 9–19 added) | Mentor: Claude (Anthropic) | Course context: CMSC 127, UP Tacloban*
+*Last updated: 2026-07-01 (Lessons 21–23 added: controller/route layers, HTTP status codes, debugging) | Mentor: Claude (Anthropic) | Course context: CMSC 127, UP Tacloban*
  
