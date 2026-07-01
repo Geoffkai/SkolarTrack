@@ -9,13 +9,6 @@ const pool = require("./config/db");
 const app = express();
 app.use(express.json());
 
-// TEMP DEBUG — delete after we solve this
-app.use((req, res, next) => {
-  console.log("→ Content-Type:", req.headers["content-type"]);
-  console.log("→ req.body:", req.body);
-  next();
-});
-
 // routes
 app.use("/auth", authRoutes);
 

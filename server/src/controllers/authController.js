@@ -1,4 +1,5 @@
 const bcrypt = require("bcryptjs"); // the hashing tool
+const jwt = require("jsonwebtoken");
 const { findUserByEmail, createUser } = require("../models/userModel"); // the two model function
 
 async function register(req, res) {
@@ -40,4 +41,39 @@ async function register(req, res) {
   }
 }
 
-module.exports = { register };
+async function login(req, res) {
+  try {
+    // 1. read credentials from the body
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password are required" });
+    }
+
+    // 2. find the user
+    const user = await findUserByEmail(email);
+    if (!user) {
+      return res.status(401).json({ error: "invalid email or password" });
+    }
+
+    // 3. compare the typed password against the stored hash
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ error: "invalid email or password" });
+    }
+
+    // 4. mint the token - made FROM the data, signed by the secret.
+    const token = jwt.sign(
+      { userId: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN },
+    );
+
+    // 5. success - hand back the token
+    return res.status(200).json({ token });
+  } catch (error) {
+    console.error("login error: ", error);
+    return res.status(500).json({ error: "something went wrong" });
+  }
+}
+module.exports = { register, login };
