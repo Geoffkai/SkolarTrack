@@ -20,7 +20,7 @@ async function register(req, res) {
     }
 
     // 4. hash the password
-    const passwordHash = bcrypt.hash(password, 10); // 10 standard cost factor
+    const passwordHash = await bcrypt.hash(password, 10); // 10 standard cost factor
 
     // 5. save the user, get the created row back
     const user = await createUser(

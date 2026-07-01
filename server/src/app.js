@@ -1,9 +1,23 @@
 require("dotenv").config();
+
+// imports
 const express = require("express");
+const authRoutes = require("./routes/authRoutes");
+const pool = require("./config/db");
+
+// app + middleware
 const app = express();
 app.use(express.json());
 
-const pool = require("./config/db");
+// TEMP DEBUG — delete after we solve this
+app.use((req, res, next) => {
+  console.log("→ Content-Type:", req.headers["content-type"]);
+  console.log("→ req.body:", req.body);
+  next();
+});
+
+// routes
+app.use("/auth", authRoutes);
 
 app.get("/health", async (req, res) => {
   try {
