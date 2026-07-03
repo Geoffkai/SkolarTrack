@@ -4,8 +4,7 @@ require("dotenv").config();
 const express = require("express");
 const authRoutes = require("./routes/authRoutes");
 const pool = require("./config/db");
-const verifyToken = require("./middleware/auth");
-const requireAdmin = require("./middleware/roles");
+const scholarshipRoutes = require("./routes/scholarshipRoutes");
 
 // app + middleware
 const app = express();
@@ -13,6 +12,7 @@ app.use(express.json());
 
 // routes
 app.use("/auth", authRoutes);
+app.use("/scholarships", scholarshipRoutes);
 
 app.get("/health", async (req, res) => {
   try {

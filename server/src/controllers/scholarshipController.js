@@ -32,4 +32,94 @@ async function getOne(req, res) {
   }
 }
 
-async function create(req, res) {}
+async function create(req, res) {
+  try {
+    const { userId } = req.user;
+    const {
+      title,
+      organization,
+      description,
+      amount,
+      slots,
+      requirements,
+      deadline,
+    } = req.body;
+
+    if (!title || !organization || !deadline) {
+      return res.status(400).json({ error: "missing input" });
+    }
+
+    const scholarship = await createScholarship(
+      userId,
+      title,
+      organization,
+      description,
+      amount,
+      slots,
+      requirements,
+      deadline,
+    );
+
+    return res.status(201).json({ scholarship });
+  } catch (error) {
+    console.error("creating error: ", error);
+    return res.status(500).json({ error: "something went wrong" });
+  }
+}
+
+async function update(req, res) {
+  try {
+    const scholarshipId = req.params.id;
+    const {
+      title,
+      organization,
+      description,
+      amount,
+      slots,
+      requirements,
+      deadline,
+      status,
+    } = req.body;
+
+    const scholarship = await getScholarshipById(scholarshipId);
+
+    if (!scholarship) {
+      return res.status(404).json({ error: "no scholarship found" });
+    }
+
+    const result = await updateScholarship(
+      scholarshipId,
+      title,
+      organization,
+      description,
+      amount,
+      slots,
+      requirements,
+      deadline,
+    );
+
+    return res.status(200).json({ result });
+  } catch (error) {
+    console.error("update scholarship error: ", error);
+    return res.status(500).json({ error: "something went wrong" });
+  }
+}
+
+async function remove(req, res) {
+  try {
+    const scholarshipId = req.params.id;
+    const scholarship = await getScholarshipById(scholarshipId);
+
+    if (!scholarship) {
+      return res.status(404).json({ error: "no scholarship found" });
+    }
+
+    const result = await closeScholarship(scholarshipId);
+    return res.status(200).json({ result });
+  } catch (error) {
+    console.log("error in removing: ", error);
+    return res.status(500).json({ error: "something went wrong" });
+  }
+}
+
+module.exports = { getAll, getOne, create, update, remove };
