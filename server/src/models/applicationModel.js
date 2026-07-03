@@ -25,12 +25,27 @@ async function createApplication(
 }
 
 // TODO: Fix this part
-async function updateApplication(studentId, scholarshipId, status, notes) {
+async function updateApplication(id, studentId, status, notes) {
   const result = await pool.query(
     `UPDATE applications SET status = $1, notes = $2 
-    WHERE student_id = $3 AND scholarship_id = $4
+    WHERE id = $3 AND student_id = $4
     RETURNING *`,
-    [status, notes, studentId, scholarshipId],
+    [status, notes, id, studentId],
   );
   return result.rows[0];
 }
+
+async function deleteApplication(id, studentId) {
+  const result = await pool.query(
+    `DELETE FROM applications WHERE id = $1 AND student_id = $2`,
+    [id, studentId],
+  );
+  return result.rowCount;
+}
+
+module.exports = {
+  getApplicationsByStudent,
+  createApplication,
+  updateApplication,
+  deleteApplication,
+};
