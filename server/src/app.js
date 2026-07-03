@@ -5,6 +5,7 @@ const express = require("express");
 const authRoutes = require("./routes/authRoutes");
 const pool = require("./config/db");
 const scholarshipRoutes = require("./routes/scholarshipRoutes");
+const applicationRoutes = require("./routes/applicationRoutes");
 
 // app + middleware
 const app = express();
@@ -13,6 +14,7 @@ app.use(express.json());
 // routes
 app.use("/auth", authRoutes);
 app.use("/scholarships", scholarshipRoutes);
+app.use("/applications", applicationRoutes);
 
 app.get("/health", async (req, res) => {
   try {
