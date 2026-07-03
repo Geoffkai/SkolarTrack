@@ -18,6 +18,8 @@
 29. [Auth Middleware: verifyToken & requireAdmin (RBAC)](#lesson-29-auth-middleware)
 30. [The `req` Object & Request-Scoped Data](#lesson-30-req-object)
 31. [POST vs GET Revisited](#lesson-31-post-vs-get-revisited)
+32. [Scholarship CRUD — `req.params`, REST Naming, and Query Discipline](#lesson-32-scholarship-crud)
+33. [Live-Testing Discipline — Proving RBAC and Soft Delete](#lesson-33-live-testing-discipline)
 
 *(Lessons 1–23 are in Part 1.)*
 
@@ -544,6 +546,160 @@ The token is *permission metadata about the request*, kept separate from the req
 
 ---
 
+## Lesson 32: Scholarship CRUD — `req.params`, REST Naming, and Query Discipline
+
+**Date learned:** 2026-07-04
+**Tags:** `req.params` `crud` `rest` `route-order` `returning` `mvc` `soft-delete`
+
+Building the scholarship vertical slice (model → controller → route) reused everything from auth, but added the first **resource with an id in the URL** — which introduced `req.params`, 404 handling, and a REST naming distinction auth routes never needed.
+
+### Why an id has to live in the URL, not the body
+
+The starting question: how does a request say "which one specifically"? Your frontend (Day 11) needs to show *one* scholarship when a student clicks it, not the whole list `getAllScholarships` returns. HTTP's answer is: **put the identifier in the URL path itself.**
+
+```
+GET /scholarships        → give me ALL of them
+GET /scholarships/42     → give me the ONE with id = 42
+```
+
+That `42` is the real primary key from your `scholarships` table — the URL is *carrying data*, same as `req.body` does, just in a different location.
+
+**Why not just put `{ id: 42 }` in a body, like login does with credentials?** Because of Lesson 31's rule: **a GET request has no body.** Browsing to a URL, clicking a link — none of that sends a body. So the only place left to identify *which* resource is the URL path itself.
+
+### `req.params` — the mechanism
+
+```javascript
+router.get("/:id", getOne);
+```
+
+`:id` is a **named placeholder** in the route pattern — "this segment of the path is a variable, call whatever shows up here `id`." When a real request hits `GET /scholarships/42`, Express matches `42` against that blank and hands it to the controller as:
+
+```javascript
+req.params.id   // → "42"  (a STRING — URLs are always text, never numbers)
+```
+
+Same relationship as `req.body` and `express.json()`: something upstream parses, the controller just reads the result off `req`. Multiple named blanks are possible in one route (`/:type/:id` → `req.params.type`, `req.params.id`), same mechanism, more of it.
+
+### Why use a variable at all instead of one route per scholarship?
+
+The alternative would be writing a literal route for every row:
+```javascript
+router.get("/scholarships/1", getScholarship1);
+router.get("/scholarships/2", getScholarship2);
+// ...forever, redeployed every time an admin posts a new one
+```
+This breaks immediately — you don't know in advance how many scholarships will exist. `:id` is **one route that handles infinite cases**: the *pattern* (path + verb) stays fixed, the *variable part* changes per request. This is the exact same instinct as a function parameter in any language already known: `getScholarship(int id)` in Java doesn't need a new method per possible id — one method, the value changes at call-time. `:id` is a parameter for a URL route the same way `int id` is a parameter for a method.
+
+**The full chain of reasoning, compressed:** an id needs to travel with the request → GET has no body → so it rides in the URL as a named variable (`:id`) → and one route definition with that variable serves every possible id, instead of needing a hardcoded route per row.
+
+### What REST actually means (not just a buzzword)
+
+**REST** = **Re**presentational **S**tate **Trans**fer — not a technology, a set of **conventions** for designing APIs, and this build has followed them the whole time without the label attached:
+
+- Resources (things: users, scholarships) get **URLs that name them** — `/scholarships`, `/scholarships/42`
+- The **HTTP verb** says what to *do* to that resource — `GET` = read, `POST` = create, `PUT` = update, `DELETE` = remove (Lesson 18)
+- The server doesn't remember anything about the client between requests — each request carries everything needed to understand it (why JWT rides on *every* request instead of a server-side login session — Lesson 20's statelessness)
+
+"RESTful API" = an API organized around resources-as-URLs + verbs-as-actions. The `scholarship-tracker-ph.md` API Routes table is a REST design — that's why every line reads as verb + path + meaning.
+
+### REST naming in practice: resource paths vs action paths
+
+This is *why* `scholarshipRoutes.js` never needed a `/create` or `/update` suffix, while `authRoutes.js` needed `/register` and `/login`:
+
+| Type | Example | Why the path looks that way |
+|---|---|---|
+| **Resource** (a "thing" with an id) | `POST /scholarships`, `PUT /scholarships/:id`, `DELETE /scholarships/:id` | The path names the *noun*; the HTTP **verb** already names the action. `POST` aimed at a resource path already means "create" — adding `/create` on top is redundant and breaks the pattern. |
+| **Action** (no resource, just a process) | `POST /auth/register`, `POST /auth/login` | There's no "thing" to point at — only a process to trigger — so the path has to spell out *what to do*, since the verb alone (`POST`) isn't specific enough on its own. |
+
+One-sentence rule: **if there's an id, the noun goes in the path and the verb does the work; if there's no id, the path has to name the action itself.**
+
+### The `RETURNING *` + `return result.rows[0]` habit (a real bug, caught twice)
+
+Every mutating query (`INSERT`, `UPDATE`) needs **two things**, and both got dropped independently while building `createScholarship` and `updateScholarship`:
+
+1. `RETURNING *;` in the SQL — without it, Postgres saves the row fine, but tells your JS nothing about it. `result.rows` comes back empty. The row isn't missing from the *database* — it's missing from your *response*.
+2. `return result.rows[0];` at the end of the function — without it, the function returns `undefined` no matter what the query did.
+
+> **Tell to remember:** if a create/update "seems to work" (no thrown error) but the API response is empty or `undefined`, check both of these lines before assuming the logic is wrong. Also watch for the property-name typo variant: `result.row[0]` (missing the `s`) throws `Cannot read properties of undefined (reading '0')` — a different error message than a missing `RETURNING`, but same root cause: not checking the actual shape of `result` against a working example.
+
+### 404 vs 400 — matching the status code to what's actually wrong
+
+A missing/malformed id in the request is `400` (client sent bad input), but a **well-formed id that simply doesn't match any row** is `404` (Not Found) — the request was fine, the resource just isn't there. Mixing these up sends the wrong signal to whatever's reading the status code (Lesson 22: the client reacts to the number alone, without reading the body).
+
+Also caught: `update` briefly returning `201` — wrong, because `201` specifically means "something new was created" (Lesson 22). `update` modifies an existing row, so it's `200` — same reasoning as why `login` is `200` and `register` is `201`.
+
+### Route order: specific paths before variable paths
+
+```javascript
+router.get("/", getAll);       // list
+router.get("/:id", getOne);    // one
+```
+
+Express matches top-to-bottom, first match wins. This pair is safe either order (`/:id` requires *something* after the slash, so it can't accidentally swallow `GET /`). But the general rule matters for the future: if a **literal** path is ever added alongside a variable one — e.g. `/featured` next to `/:id` — the literal path must be listed **above** the variable one, or `/:id` will silently catch `GET /scholarships/featured` first (treating `"featured"` as an id), returning a wrong `404` instead of running the intended handler. No crash, no error message pointing at the cause — just quietly wrong routing.
+
+### Where guards live: global vs targeted, applied for real this time
+
+Revisits Lesson 28's split with the concrete reason `verifyToken`/`requireAdmin` live in `scholarshipRoutes.js`, not `app.js`:
+
+- `express.json()` is **global** — every request needs its body parsed, no exceptions — so `app.use(express.json())` sits in `app.js`, once, for everything.
+- `verifyToken`/`requireAdmin` are **targeted** — they must run on `POST`/`PUT`/`DELETE /scholarships` but explicitly *not* on `GET /scholarships` (public browsing must stay open) or `POST /auth/login` (impossible — no token exists yet to check; that's what login is *for*). Putting them in `app.js` globally would break both. They're listed as extra arguments directly on the specific route lines that need them:
+
+```javascript
+router.post("/", verifyToken, requireAdmin, create);
+router.put("/:id", verifyToken, requireAdmin, update);
+router.delete("/:id", verifyToken, requireAdmin, remove);
+```
+
+**One-sentence version:** global middleware answers "everyone, always," so it lives in `app.js`; targeted middleware answers "only these specific routes," so it's attached directly on the routes that need it.
+
+> One line: **`req.params` carries URL-path variables because GET has no body, and one route with `:id` replaces an impossible one-route-per-row scheme; REST means resources-as-URLs + verbs-as-actions, statelessly — resource paths let the verb do the work, action paths must name themselves; every INSERT/UPDATE needs `RETURNING *` + `return result.rows[0]` or the write silently vanishes from the response; 404 means "well-formed request, resource not found" (not 400); list specific paths above variable ones; and middleware lives wherever its "who does this apply to" question is answered — global in `app.js`, targeted on the specific route.**
+
+---
+
+## Lesson 33: Live-Testing Discipline — Proving RBAC and Soft Delete
+
+**Date learned:** 2026-07-04
+**Tags:** `thunder-client` `testing` `rbac` `soft-delete` `verification` `debugging`
+
+Writing the guard chain (`verifyToken, requireAdmin`) and the soft-delete SQL doesn't prove either one *works* — only live-testing each outcome does. This session's Thunder Client run is worth remembering as the actual verification checklist, not just a formality.
+
+### RBAC isn't proven until you've seen BOTH outcomes
+
+It's tempting to test only the "happy path" (admin token → success) and assume the guard works. But the entire point of `requireAdmin` is the *rejection* case — so the real proof is testing **both**:
+
+- Student token on `POST /scholarships` → confirmed `401 admin access required`
+- Admin token on the same route → confirmed `201 Created`
+
+Same route, same code, only the token differs — that contrast **is** the RBAC test. Testing only one side leaves the more important half (the block) unverified.
+
+### The colon bug: leaving route syntax in a real request
+
+Hit while testing `GET /scholarships/:id` — sent literally as `http://localhost:3000/scholarships/:id` (with the colon still in it, un-substituted) instead of the real id. Server error:
+
+```
+invalid input syntax for type integer: ":1"
+```
+
+The tell: the **colon** in the error message. `:id` is **route-definition syntax** (belongs only in `scholarshipRoutes.js`), never something that appears in an actual request URL. A real client always sends the literal value (`GET /scholarships/1`), never the pattern with the colon. This is a "which layer does this syntax belong to" bug, same family as Lesson 23's shape-mismatch bugs — the fix isn't a logic change, it's recognizing which file/context a piece of syntax is meant for.
+
+### Soft delete isn't proven by the HTTP response alone
+
+`DELETE /scholarships/:id` returning `200` only proves the *request succeeded* — it does **not** by itself prove the delete was soft. The only way to actually confirm "the row still exists, just closed" is to bypass the API entirely and check the source of truth directly:
+
+```sql
+SELECT * FROM scholarships;
+```
+
+Confirmed: `status: 'closed'`, row count unchanged (`1 row`), nothing removed. Same instinct as Lesson 23's meta-lesson — verify the data, don't just trust that the code did what it was supposed to.
+
+### The testing order that catches bugs early
+
+Tests ran in dependency order — create before read, read before update, update before delete — rather than all at once at the end. Each bug (the colon-in-URL mistake, wrong status codes caught during code review) surfaced against one small, isolated piece rather than a tangle of five features failing together at once. Same "vertical slice, one thing proven at a time" discipline from Lesson 21, now applied to testing instead of building.
+
+> One line: **RBAC is only proven once you've seen both the block and the pass on the same route; route-definition syntax (`:id`) never belongs in a real request URL — recognize which layer syntax belongs to; a soft delete's `200` response only proves the request worked, not that the row survived — check the database directly; and testing in dependency order isolates each bug instead of letting them pile up.**
+
+---
+
 ## Part 2 Cheatsheet Additions
 
 ### New terms
@@ -571,6 +727,12 @@ The token is *permission metadata about the request*, kept separate from the req
 | `requireAdmin` | Guard 2 — reads `req.user.role`, 401s non-admins (RBAC) |
 | RBAC | Role-based access control — routes check `req.user.role` before running |
 | JWT snapshot | A token carries the role from signing time; DB role changes need a fresh login |
+| `req.params` | Object holding URL path variables marked with `:name` in the route definition (e.g. `:id` → `req.params.id`) |
+| REST | Re**p**resentational **S**tate **T**ransfer — API convention: resources get URLs, HTTP verbs describe the action, requests are stateless |
+| resource path vs action path | `/scholarships/:id` (verb already does the work) vs `/auth/login` (path must name the action — there's no resource/id to point at) |
+| `RETURNING *` discipline | Every INSERT/UPDATE needs `RETURNING *;` in the SQL AND `return result.rows[0];` in the JS, or the write silently vanishes from the response |
+| route order | Literal/specific paths must be listed above variable (`:id`) paths in the same router file, or the variable route can silently swallow requests meant for the literal one |
+| soft-delete verification | A `200` from `DELETE` only proves the request ran — confirm the row still exists via a direct `SELECT`, don't trust the response alone |
 
 ### Error tells at a glance
 
@@ -579,11 +741,15 @@ The token is *permission metadata about the request*, kept separate from the req
 | `Missing script: "dev"` | No `dev` shortcut in package.json | Add it to `"scripts"` |
 | `argument handler must be a function` | Route import is `undefined`/wrong shape | Match `{ }` braces on require/exports |
 | `Cannot destructure property '...' of 'req.body'` | `express.json()` missing/below routes, or body not JSON | Order middleware first; send `application/json` |
-| `ERR_HTTP_HEADERS_SENT` | Two responses on one request | Use `.status(code).json(body)`; one reply per path |
+| `ERR_HTTP_HEADERS_SENT` | Two responses on one request | Use `.status(code).json(body)`; one reply per path; check every branch has a `return` |
 | `Illegal arguments: string, undefined` (bcrypt) | One input is `undefined` | Find which; trace why it's empty |
 | `ReferenceError: X is not defined` | `X` never imported | Add the `require` at the top |
 | `TypeError: X is not a function` | Imported, wrong shape | Fix the braces |
+| `invalid input syntax for type integer: ":id"` (or similar, with a colon) | Left route-definition syntax (`:id`) in an actual request URL instead of a real value | Replace `:id` with the real value, e.g. `/scholarships/1` not `/scholarships/:id` |
+| `Cannot read properties of undefined (reading '0')` | Accessed a property that doesn't exist right before `[0]` — e.g. `result.row[0]` instead of `result.rows[0]` | Compare the exact property name against a working example |
+| Response looks empty/`undefined` after a successful INSERT/UPDATE (no thrown error) | Missing `RETURNING *;` in the SQL, or missing `return result.rows[0];` in the JS | Add both — they're a pair, not optional extras |
+| Wrong status code returned (not a crash, just semantically off) | 404 vs 400 confused, or 200 vs 201 confused | Re-check against Lesson 22's table: 400 = bad input, 404 = valid request but no match; 200 = success on existing data, 201 = something new created |
 
 ---
 
-*Part 2 started: 2026-07-01 (Lessons 24–31: npm/nodemon/deps, building login, JWT anatomy, login debugging, request lifecycle, auth middleware + RBAC, the req object, POST vs GET) | Mentor: Claude (Anthropic) | Course context: CMSC 127, UP Tacloban*
+*Part 2 updated: 2026-07-04 (Lessons 32–33 added: scholarship CRUD — `req.params`, REST resource-vs-action naming, `RETURNING *` discipline, route order, global-vs-targeted middleware placement — and live-testing discipline: proving RBAC both ways, the colon-in-URL bug, verifying soft delete against the database, testing in dependency order) | Mentor: Claude (Anthropic) | Course context: CMSC 127, UP Tacloban*

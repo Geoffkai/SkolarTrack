@@ -6,11 +6,9 @@ async function getAllScholarships() {
 }
 
 async function getScholarshipById(id) {
-  const result = await pool.query(
-    `
-        SELECT * FROM scholarships WHERE id = $1;`,
-    [id],
-  );
+  const result = await pool.query(`SELECT * FROM scholarships WHERE id = $1;`, [
+    id,
+  ]);
   return result.rows[0];
 }
 
