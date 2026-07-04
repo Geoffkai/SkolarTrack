@@ -50,6 +50,16 @@ async function update(req, res) {
     const userId = req.user.userId; // ownership id comes from the verified token, never trusted from req.body
     const applicationId = req.params.id; // the applications primary key, from the URL (:id)
     const { status, notes } = req.body;
+    const allowedStatuses = ["interested", "applied", "interview", "result"];
+
+    if (!status) {
+      return res.status(400).json({ error: "status is missing" });
+    }
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        error: `status must be one of: ${allowedStatuses.join(", ")}`,
+      });
+    }
 
     const updatedApplication = await updateApplication(
       applicationId,

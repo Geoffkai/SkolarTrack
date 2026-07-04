@@ -1,5 +1,17 @@
 const pool = require("../config/db");
 
+async function getApplicantsByScholarshipId(scholarshipId, adminId) {
+  const result = await pool.query(
+    `SELECT applications.id, applications.status, applications.notes, users.name, users.email 
+    FROM applications 
+    JOIN users ON applications.student_id = users.id 
+    JOIN scholarships ON applications.scholarship_id = scholarships.id
+    WHERE scholarships.id = $1 AND scholarships.posted_by = $2`,
+    [scholarshipId, adminId],
+  );
+  return result.rows;
+}
+
 async function getAllScholarships() {
   const result = await pool.query("SELECT * FROM scholarships;");
   return result.rows;

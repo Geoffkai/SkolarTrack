@@ -20,6 +20,8 @@
 31. [POST vs GET Revisited](#lesson-31-post-vs-get-revisited)
 32. [Scholarship CRUD — `req.params`, REST Naming, and Query Discipline](#lesson-32-scholarship-crud)
 33. [Live-Testing Discipline — Proving RBAC and Soft Delete](#lesson-33-live-testing-discipline)
+34. [RBAC Needs Guards on Both Sides — `verifyToken` Isn't Enough](#lesson-34-rbac-both-sides)
+35. [Layered Validation — the `undefined` → `NULL` Trap and Guard-Clause Discipline](#lesson-35-layered-validation)
 
 *(Lessons 1–23 are in Part 1.)*
 
@@ -700,6 +702,144 @@ Tests ran in dependency order — create before read, read before update, update
 
 ---
 
+## Lesson 34: RBAC Needs Guards on Both Sides — `verifyToken` Isn't Enough
+
+**Date learned:** 2026-07-05
+**Tags:** `rbac` `middleware` `security-gap` `requirestudent` `authorization`
+
+Building `applicationRoutes.js`, every route was given `verifyToken` and nothing else — the same instinct that felt right for `GET /scholarships` (public, no guard needed) got mis-applied here. The result: any valid, logged-in token — **including an admin's** — could hit `POST /applications`, `PUT /applications/:id`, or `DELETE /applications/:id`. Nothing blocked an admin from "bookmarking" a scholarship, which is semantically nonsensical and explicitly a student-only action per `scholarship-tracker-ph.md`.
+
+### `verifyToken` answers a narrower question than it feels like it does
+
+`verifyToken` proves exactly one thing: **"is this a real, currently-valid token, signed by this server?"** It does *not* prove "is this the *right kind* of user for this specific route." Those are two separate questions, and scholarships happened to only ever need the second question answered for *admin-only* write routes — so it was easy to forget that the second question exists at all, and that it can point the *other* direction too (student-only, not just admin-only).
+
+### The gap, traced end to end
+
+- Admin logs in → gets a real, valid token, payload `{ userId: 1, role: "admin" }`.
+- Admin sends `POST /applications` with that token.
+- Route: `router.post("/", verifyToken, create);` — `verifyToken` runs, the token is genuinely valid, decodes fine, `next()` fires.
+- `create` runs unguarded — nothing ever checked `req.user.role`. A row gets created with `student_id` = the admin's own `userId`. `201 Created`, no error, no warning.
+
+No crash, no thrown error — a **silently wrong outcome**, the same category of bug as Lesson 32's route-order issue: nothing breaks, the wrong thing just quietly succeeds.
+
+### The fix: a symmetric guard, same shape as `requireAdmin`
+
+```javascript
+// middleware/roles.js
+function requireStudent(req, res, next) {
+  if (!req.user || req.user.role !== "student") {
+    return res.status(401).json({ error: "student access required" });
+  }
+  next();   // easy to forget on the success path — see the bug below
+}
+
+module.exports = { requireAdmin, requireStudent };
+```
+
+**Bug caught while building this:** the first draft of `requireStudent` never called `next()` on the pass case — only the `if` block returned anything. A real student with a valid token would run this middleware, the condition would be `false`, and then... nothing. No `next()`, no response — the request just hangs forever. Contrast this with `requireAdmin`, which has `next();` sitting *after* the `if` block, unconditionally reached whenever the guard doesn't block. Every guard needs an explicit "and here's what happens when you pass," not just "here's what happens when you fail."
+
+Wired onto every write (and, deliberately, every) route in `applicationRoutes.js`:
+
+```javascript
+router.get("/", verifyToken, requireStudent, getAll);
+router.post("/", verifyToken, requireStudent, create);
+router.put("/:id", verifyToken, requireStudent, update);
+router.delete("/:id", verifyToken, requireStudent, remove);
+```
+
+### The general principle, worth carrying into every future protected route
+
+Every protected route actually answers **two independent questions**, and both need an explicit guard:
+
+1. **Authentication** — "is this a real, logged-in user at all?" → `verifyToken`
+2. **Authorization** — "is this *specific* user allowed to do *this specific* action?" → a role check, and the role check can point in **either** direction (admin-only *or* student-only) depending on the feature — it's not always "block non-admins." Applications needed the mirror-image guard of scholarships, and that mirror had to be built by hand; it didn't come for free just because `requireAdmin` already existed.
+
+**Also surfaced, not yet built:** the reverse problem exists too — nothing currently stops a student from making a `GET` request to see *only their own* applications, which is fine, but there's also no route yet for an admin to see *who applied* to their scholarships (`scholarship-tracker-ph.md` names this feature — "View applicants" — but never gave it a route in the API table). That gap is real but is a missing *feature*, not a missing *guard*, and is tracked separately as upcoming work (a nested resource route with its first JOIN query).
+
+> One line: **`verifyToken` only proves "logged in," never "allowed here" — every protected route needs its own explicit role guard, guards can point either direction (admin-only or student-only) depending on the feature, and a guard without a `next()` on its success path silently hangs the request instead of letting it through.**
+
+---
+
+## Lesson 35: Layered Validation — the `undefined` → `NULL` Trap and Guard-Clause Discipline
+
+**Date learned:** 2026-07-05
+**Tags:** `validation` `null` `postgres` `check-constraint` `coalesce` `guard-clauses` `put-vs-patch`
+
+Adding status validation to `PUT /applications/:id` surfaced a genuinely dangerous silent bug — not a crash, a **silent data-corruption path** — and a decision about how strict a `PUT` route should be.
+
+### The scenario that exposed it
+
+`PUT /applications/:id` was built to accept `{ status, notes }` — but nothing required `status` to actually be present. A request sending only `{ "notes": "following up" }` (no `status` field at all) should, intuitively, just update the note. Walking that through the actual code revealed it does something much worse.
+
+### Tracing `undefined` all the way to a live `UPDATE`
+
+```javascript
+const { status, notes } = req.body;   // status → undefined (never sent)
+// ...
+await updateApplication(applicationId, userId, status, notes);   // undefined passed straight through
+```
+
+```javascript
+// inside the model
+`UPDATE applications SET status = $1, notes = $2 WHERE ...`,
+[status, notes, id, studentId],   // $1 = undefined
+```
+
+**The key fact:** the `pg` library silently converts a JavaScript `undefined` bound parameter into SQL `NULL`. So this doesn't error, and it doesn't skip the column — it actively runs `SET status = NULL`, **wiping out whatever status the student had already recorded**, with zero error thrown and zero indication anything went wrong.
+
+### Why the schema's own `CHECK` constraint doesn't catch this
+
+`status VARCHAR CHECK (status IN ('interested','applied','interview','result'))` looks like it should reject a value outside that list — and `NULL` is outside that list. But in SQL, a `CHECK` constraint only **rejects** when the expression evaluates to `FALSE`. When the value being checked is `NULL`, the whole expression evaluates to `NULL`, not `FALSE` — and Postgres treats a `NULL` result as **passing**, not failing. `NULL` is a different kind of "not in the list" than `'banana'` is, and the constraint quietly lets it through.
+
+### Two candidate fixes, and why one was chosen over the other
+
+**Option A — require the full body (full replacement).** Reject the request with `400` if `status` is missing at all, matching the `PUT` = full-replacement convention already decided for scholarships back in Lesson 18/31.
+
+**Option B — `COALESCE` for a true partial update.**
+```sql
+SET status = COALESCE($1, status), notes = COALESCE($2, notes)
+```
+`COALESCE(a, b)` returns `a` if it isn't `NULL`, otherwise falls back to `b` — "use the new value if one was given, otherwise keep what's already there." This genuinely supports sending only the fields you want to change.
+
+**Chosen: Option A.** Reasoning, not just preference:
+- **REST convention:** `PUT` is *defined* to mean full replacement; `PATCH` is the verb for partial updates. Using `COALESCE` to make a `PUT` route quietly behave like `PATCH` means the route's verb lies about what it does.
+- **Consistency with an earlier decision already made** — scholarships already committed to "PUT = full replacement, frontend always sends every field" (Lesson 18/31). Solving the identical tradeoff two different ways in two different files would make the codebase feel accidental rather than deliberately designed.
+- **It costs nothing in the real UI** — the tracker form (Day 11) will always submit both `status` and `notes` together, pre-filled from the existing record. The "notes-only" scenario this bug depends on doesn't happen through the actual frontend.
+- `COALESCE` is filed away as the right tool *if* a real `PATCH /applications/:id` route is ever built later — not deleted knowledge, just parked for the correct use case.
+
+### The validation, built as explicit guard clauses
+
+```javascript
+const allowedStatuses = ["interested", "applied", "interview", "result"];
+
+if (!status) {
+  return res.status(400).json({ error: "status is missing" });
+}
+if (!allowedStatuses.includes(status)) {
+  return res.status(400).json({
+    error: `status must be one of: ${allowedStatuses.join(", ")}`,
+  });
+}
+```
+
+**A redundant condition caught along the way:** an earlier draft wrote the second check as `if (status && !allowedStatuses.includes(status))`. Once the *first* guard clause has already returned on a falsy `status`, execution can only reach the second check when `status` is already known to be truthy — so `status &&` there is checking something already proven one line earlier. It can never change the outcome; safe to drop.
+
+### Why validate in JS at all, when the database already has a `CHECK` constraint?
+
+Not redundant — **complementary, at two different layers**:
+- The **database `CHECK` constraint** is the *last line of defense* — it protects data integrity no matter what code ever touches this table, including code not written yet.
+- The **JS validation** is the *first line* — it catches the mistake immediately, with a specific, actionable message (`400`, "status must be one of: ..."), instead of the request round-tripping to Neon just to come back as an opaque Postgres error that gets swallowed into a generic, unhelpful `500`.
+
+Good backends have both. Neither replaces the other.
+
+### On validation code "feeling heavy"
+
+Two guard clauses (missing vs. invalid-value) for one field isn't bloat — it's two genuinely different ways the same input can be wrong, and each deserves its own specific, actionable error message. Collapsing them into a single combined condition would save a few lines but cost the caller a vaguer error ("bad status" instead of naming exactly what's wrong and what's allowed) — a bad trade. A short list of guard clauses, each catching one specific failure mode with a clear message, is what real backend validation is supposed to look like, not a sign of over-engineering.
+
+> One line: **`pg` silently turns a JS `undefined` bound parameter into SQL `NULL`, and a `CHECK` constraint doesn't reject `NULL` (it evaluates to `NULL`, not `FALSE`, so it "passes") — meaning a missing field can silently wipe existing data with zero error; fix that by requiring the full body on `PUT` (staying consistent with the full-replacement decision already made for scholarships, and saving `COALESCE`-style partial updates for a real future `PATCH` route); and a validation block with several specific guard clauses, each with its own actionable error message, is correct backend design, not bloat.**
+
+---
+
 ## Part 2 Cheatsheet Additions
 
 ### New terms
@@ -733,6 +873,12 @@ Tests ran in dependency order — create before read, read before update, update
 | `RETURNING *` discipline | Every INSERT/UPDATE needs `RETURNING *;` in the SQL AND `return result.rows[0];` in the JS, or the write silently vanishes from the response |
 | route order | Literal/specific paths must be listed above variable (`:id`) paths in the same router file, or the variable route can silently swallow requests meant for the literal one |
 | soft-delete verification | A `200` from `DELETE` only proves the request ran — confirm the row still exists via a direct `SELECT`, don't trust the response alone |
+| `requireStudent` | Mirror of `requireAdmin` — 401s any request whose `req.user.role !== "student"`; needed because RBAC guards can point either direction, not just admin-only |
+| authentication vs authorization | Two separate questions every protected route must answer: "are you logged in?" (`verifyToken`) vs "are you allowed to do THIS?" (a role guard) — passing one doesn't imply passing the other |
+| `pg` + `undefined` → `NULL` | The `pg` driver silently converts a JS `undefined` bound parameter into SQL `NULL` — a missing field can silently overwrite existing data with no error |
+| `CHECK` constraint + `NULL` | A `CHECK` constraint evaluates to `NULL` (not `FALSE`) when the checked value is `NULL`, and Postgres treats that as passing — `CHECK` does NOT reject `NULL` by default |
+| `COALESCE(a, b)` | SQL function: returns `a` if it's not `NULL`, otherwise `b` — the real tool for genuine partial updates (belongs on a `PATCH` route, not a `PUT`) |
+| PUT = full replacement | Deliberate project-wide convention: `PUT` routes require every field to be sent, rather than supporting partial updates — kept consistent across scholarships and applications |
 
 ### Error tells at a glance
 
@@ -749,7 +895,10 @@ Tests ran in dependency order — create before read, read before update, update
 | `Cannot read properties of undefined (reading '0')` | Accessed a property that doesn't exist right before `[0]` — e.g. `result.row[0]` instead of `result.rows[0]` | Compare the exact property name against a working example |
 | Response looks empty/`undefined` after a successful INSERT/UPDATE (no thrown error) | Missing `RETURNING *;` in the SQL, or missing `return result.rows[0];` in the JS | Add both — they're a pair, not optional extras |
 | Wrong status code returned (not a crash, just semantically off) | 404 vs 400 confused, or 200 vs 201 confused | Re-check against Lesson 22's table: 400 = bad input, 404 = valid request but no match; 200 = success on existing data, 201 = something new created |
+| A request just hangs forever, no response, no error | Middleware guard is missing `next()` on its success/pass path | Every guard needs an explicit `next()` reached when it does NOT block — check both branches, not just the failure one |
+| A wrong-role user (e.g. admin) can hit a route meant for another role, no error at all | Route only has `verifyToken`, no role-specific guard | Authentication ("logged in?") and authorization ("allowed HERE?") are separate checks — add the matching `requireX` guard |
+| A field silently disappears / gets wiped to null after an update, no error thrown | JS `undefined` (a field never sent) was passed straight into a `pg` query, silently became SQL `NULL` | Validate required fields are present BEFORE calling the model; don't rely on the `CHECK` constraint to catch `NULL` — it won't |
 
 ---
 
-*Part 2 updated: 2026-07-04 (Lessons 32–33 added: scholarship CRUD — `req.params`, REST resource-vs-action naming, `RETURNING *` discipline, route order, global-vs-targeted middleware placement — and live-testing discipline: proving RBAC both ways, the colon-in-URL bug, verifying soft delete against the database, testing in dependency order) | Mentor: Claude (Anthropic) | Course context: CMSC 127, UP Tacloban*
+*Part 2 updated: 2026-07-05 (Lessons 34–35 added: RBAC needs symmetric guards on both sides — `verifyToken` alone only proves "logged in," never "allowed here," and every guard needs an explicit `next()` on its pass path — plus the `undefined`→`NULL` silent-corruption trap, why `CHECK` constraints don't reject `NULL`, the `PUT`-full-replacement-vs-`PATCH`-`COALESCE` decision, and why multi-guard-clause validation is correct design, not bloat) | Mentor: Claude (Anthropic) | Course context: CMSC 127, UP Tacloban*
