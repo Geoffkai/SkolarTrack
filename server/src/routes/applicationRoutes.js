@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const verifyToken = require("../middleware/auth");
+const { requireStudent } = require("../middleware/roles");
 
 const {
   getAll,
@@ -9,9 +10,9 @@ const {
   remove,
 } = require("../controllers/applicationController");
 
-router.get("/", verifyToken, getAll);
-router.post("/", verifyToken, create);
-router.put("/:id", verifyToken, update);
-router.delete("/:id", verifyToken, remove);
+router.get("/", verifyToken, requireStudent, getAll);
+router.post("/", verifyToken, requireStudent, create);
+router.put("/:id", verifyToken, requireStudent, update);
+router.delete("/:id", verifyToken, requireStudent, remove);
 
 module.exports = router;
