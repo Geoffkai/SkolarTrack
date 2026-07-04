@@ -15,7 +15,7 @@ function App() {
         <Route path="/register" element={<Register />}/>
         <Route path="/login" element={<Login />}/>
         <Route path="/scholarships" element={<Scholarships />}/>
-        <Route path="/scholarships/:id" element={<Scholarship Detail />}/>
+        <Route path="/scholarships/:id" element={<ScholarshipDetail />}/>
         <Route path="/my-tracker" element={<MyTracker />}/>
         <Route path="/admin/dashboard" element={<AdminDashboard />}/>
         <Route path="/admin/scholarships/new" element={<NewScholarship />}/>
