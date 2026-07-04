@@ -4,6 +4,7 @@ const {
   createScholarship,
   updateScholarship,
   closeScholarship,
+  getApplicantsByScholarshipId,
 } = require("../models/scholarshipModel");
 
 async function getAll(req, res) {
@@ -121,4 +122,20 @@ async function remove(req, res) {
   }
 }
 
-module.exports = { getAll, getOne, create, update, remove };
+async function getApplicants(req, res) {
+  try {
+    const scholarshipId = req.params.id;
+    const adminId = req.user.userId;
+
+    const applications = await getApplicantsByScholarshipId(
+      scholarshipId,
+      adminId,
+    );
+
+    return res.status(200).json({ applications });
+  } catch (error) {
+    console.error("error getting applications by scholarship id: ", error);
+    return res.status(500).json({ error: "something went wrong" });
+  }
+}
+module.exports = { getAll, getOne, create, update, remove, getApplicants };

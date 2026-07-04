@@ -99,6 +99,7 @@ async function closeScholarship(id) {
 }
 
 module.exports = {
+  getApplicantsByScholarshipId,
   getAllScholarships,
   getScholarshipById,
   createScholarship,
