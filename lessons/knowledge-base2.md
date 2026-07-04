@@ -22,6 +22,7 @@
 33. [Live-Testing Discipline — Proving RBAC and Soft Delete](#lesson-33-live-testing-discipline)
 34. [RBAC Needs Guards on Both Sides — `verifyToken` Isn't Enough](#lesson-34-rbac-both-sides)
 35. [Layered Validation — the `undefined` → `NULL` Trap and Guard-Clause Discipline](#lesson-35-layered-validation)
+36. [Admin View-Applicants — Nested Resources, JOINs, and Ownership-as-Filter](#lesson-36-view-applicants)
 
 *(Lessons 1–23 are in Part 1.)*
 
@@ -840,6 +841,104 @@ Two guard clauses (missing vs. invalid-value) for one field isn't bloat — it's
 
 ---
 
+## Lesson 36: Admin View-Applicants — Nested Resources, JOINs, and Ownership-as-Filter
+
+**Date learned:** 2026-07-05
+**Tags:** `join` `nested-resource` `rest` `ownership` `rbac` `middleware-order`
+
+Building the first admin feature that reads *across* two tables (`applications` + `users`) surfaced a new routing pattern (nested resources), the first real JOIN, and a repeat of an old middleware-order bug — worth capturing precisely because it repeated.
+
+### Nested resource paths: when the URL should describe a relationship, not just a thing
+
+`GET /scholarships/:id/applications` instead of `GET /applications?scholarshipId=42`. The deciding question: is this collection independent, just filtered — or does it only make sense *in the context of* a parent? Applications-of-a-scholarship is the second case — the URL should read like a sentence describing the relationship (`scholarship 42's applications`), and the path should mirror the actual parent/child shape in the schema (`applications.scholarship_id` → `scholarships.id`).
+
+Query params are the right tool when a collection stands alone and you're just narrowing it (`/scholarships?status=open`). Nesting is the right tool when the child genuinely doesn't exist independent of the parent in this context.
+
+Practical consequence: this route lives in `scholarshipRoutes.js`, not `applicationRoutes.js`, and takes `requireAdmin` (not `requireStudent`) — the `:id` in the path is a *scholarship* id, so the resource being addressed, and the role allowed to address it, both belong to the scholarships side.
+
+### The JOIN — a data-shape problem, not an access-control problem
+
+Easy to blur these two, but they're separate concerns entirely:
+- **Access control** (who's allowed to hit this route) is `requireAdmin`'s job — already solved before the query runs.
+- **The JOIN** solves a different problem: `applications` only stores `student_id`, a bare integer. An admin looking at `{ student_id: 7, status: 'applied' }` has no idea who `7` is. The name and email needed to make that useful live in `users`, a different table.
+
+```sql
+SELECT applications.id, applications.status, applications.notes,
+       users.name, users.email
+FROM applications
+JOIN users ON applications.student_id = users.id
+JOIN scholarships ON applications.scholarship_id = scholarships.id
+WHERE scholarships.id = $1 AND scholarships.posted_by = $2
+```
+
+A JOIN says: for each row in one table, find the matching row in another (via a shared key) and stitch them into one combined row — one query, instead of running a separate lookup per application (the N+1 query problem — slow, and worth knowing the term).
+
+**A typo caught here, worth remembering:** every reference to a column in a multi-table query needs its table-prefix spelled identically everywhere in that query. Writing `applications.status` in the `FROM`/`JOIN` lines but `application.status` (singular) in the `SELECT` line throws `missing FROM-clause entry for table "application"` — Postgres has zero contextual "does this mean applications?" reasoning. A prefix typo is treated as a reference to a table that doesn't exist.
+
+### Ownership as a `WHERE` clause, not an `if` statement
+
+Decision made deliberately (not defaulted into): only the admin who posted a scholarship (`posted_by`) can see its applicants — not any admin, globally. That's expressed as `AND scholarships.posted_by = $2` in the `WHERE` clause, with `$2` bound to `req.user.userId`.
+
+The payoff: **no branching logic anywhere in the controller for "is this yours."** Three distinct real-world cases —
+
+1. a scholarship you posted with zero applicants,
+2. a real scholarship posted by a *different* admin,
+3. a scholarship id that doesn't exist in the table at all —
+
+all produce the exact same outcome: `result.rows` comes back as `[]`. The `WHERE` clause rejects all three for one mechanical reason (the row doesn't satisfy `posted_by = $2`, or there's no row to begin with), and the controller doesn't need to tell them apart — it just sends `200 + { applications: [] }` in every case.
+
+This was a deliberate design choice, not a shortcut: returning `404` for "wrong admin" or "doesn't exist" would leak information (confirming a scholarship id exists and belongs to someone else) to an admin who has no business knowing that — the same "don't reveal which emails are registered" instinct from Lesson 25's login error message, applied to ownership instead of credentials.
+
+### The controller: no branching needed on the success path
+
+```javascript
+async function getApplicants(req, res) {
+  try {
+    const scholarshipId = req.params.id;
+    const adminId = req.user.userId;
+
+    const applications = await getApplicantsByScholarshipId(scholarshipId, adminId);
+
+    return res.status(200).json({ applications });
+  } catch (error) {
+    console.error("error getting applicants: ", error);
+    return res.status(500).json({ error: "something went wrong" });
+  }
+}
+```
+
+**A bug caught here, worth remembering:** an earlier draft checked `!applications` and returned `404` if true, on the theory that "no rows found" should 404. But the model function returns `result.rows`, which is **always an array**, even when empty — and `![]` evaluates to `false` in JavaScript (an empty array is truthy). So that `if` branch was unreachable dead code, not a working safety net. Once the ownership filter was already understood to collapse all three "nothing to show" cases into `200 + []` at the SQL level, the `if` wasn't just buggy — it was unnecessary. One response, one status code, no ternary.
+
+### An old bug, repeated: `requireAdmin` without `verifyToken` first
+
+While wiring the route, `requireAdmin` was attached without `verifyToken` in front of it:
+
+```javascript
+router.get("/:id/applications", requireAdmin, getApplicants);   // ❌ missing verifyToken
+```
+
+`requireAdmin` reads `req.user.role` — but nothing had set `req.user` yet, because `verifyToken` never ran. Result: `req.user` is `undefined`, `requireAdmin`'s `!req.user` check is `true`, and it returns `401 admin access required` **even for a genuinely valid admin token** — a silently wrong rejection, not a crash. This is the exact same failure shape as Lesson 34 (a guard depending on a step that never ran) — worth noting that this kind of bug can resurface on *every new route*, not just once. The fix is always the same: every guard that reads `req.user` needs `verifyToken` listed before it, no exceptions.
+
+```javascript
+router.get("/:id/applications", verifyToken, requireAdmin, getApplicants);   // ✅
+```
+
+### Live-testing results (this session)
+
+Following Lesson 33's discipline — testing both the pass and the block, not just the happy path:
+
+| Test | Result | Confirms |
+|---|---|---|
+| Admin token, own scholarship with an applicant | `200` + list with real `name`/`email` | JOIN works end-to-end |
+| Student token, any scholarship id | `401 admin access required` | `requireAdmin` blocking correctly |
+| No token at all | `401 no token provided` | `verifyToken` blocking first, before `requireAdmin` even runs |
+
+**Not yet tested live** (no test data existed for these cases this session — a data-setup gap, not a code-confidence gap): a scholarship the admin posted with zero applicants, and a scholarship posted by a *different* admin. Both are expected, by the SQL's own logic, to return `200 + []` — but Lesson 33's whole point is that reasoning through code isn't the same as watching it happen. Flagged as still open, to close with a second admin account + a second scholarship in a future session.
+
+> One line: **nest a route under its parent (`/scholarships/:id/applications`) when the child only makes sense in the parent's context; a JOIN stitches two tables together via a shared key to fix a data-shape problem, not an access problem, and every table-prefix reference in a multi-table query must be spelled identically everywhere; expressing ownership as a `WHERE` clause (`posted_by = $2`) collapses "not yours," "doesn't exist," and "yours but empty" into one `200 + []` response with zero branching in the controller — and checking `!applications` for that case is always dead code, since `result.rows` is truthy even when empty; and `requireAdmin` still needs `verifyToken` in front of it on every new route, or a valid admin gets wrongly rejected instead of a crash.**
+
+---
+
 ## Part 2 Cheatsheet Additions
 
 ### New terms
@@ -879,6 +978,10 @@ Two guard clauses (missing vs. invalid-value) for one field isn't bloat — it's
 | `CHECK` constraint + `NULL` | A `CHECK` constraint evaluates to `NULL` (not `FALSE`) when the checked value is `NULL`, and Postgres treats that as passing — `CHECK` does NOT reject `NULL` by default |
 | `COALESCE(a, b)` | SQL function: returns `a` if it's not `NULL`, otherwise `b` — the real tool for genuine partial updates (belongs on a `PATCH` route, not a `PUT`) |
 | PUT = full replacement | Deliberate project-wide convention: `PUT` routes require every field to be sent, rather than supporting partial updates — kept consistent across scholarships and applications |
+| nested resource route | A URL like `/scholarships/:id/applications` — used when a child collection only makes sense in the context of a specific parent, as opposed to a query param on an independent collection |
+| JOIN | Combines rows from two tables into one result, matched by a shared key (e.g. `applications.student_id = users.id`) — solves a data-shape problem, not an access-control one |
+| N+1 query problem | Running one query per row to fetch related data (instead of one JOIN) — works, but slow; worth naming when spotted |
+| ownership-as-filter | Expressing "only show rows this user owns" as a `WHERE` clause condition (e.g. `posted_by = $2`) instead of an `if` check in the controller — collapses "not found," "not yours," and "yours but empty" into one uniform response |
 
 ### Error tells at a glance
 
@@ -898,7 +1001,9 @@ Two guard clauses (missing vs. invalid-value) for one field isn't bloat — it's
 | A request just hangs forever, no response, no error | Middleware guard is missing `next()` on its success/pass path | Every guard needs an explicit `next()` reached when it does NOT block — check both branches, not just the failure one |
 | A wrong-role user (e.g. admin) can hit a route meant for another role, no error at all | Route only has `verifyToken`, no role-specific guard | Authentication ("logged in?") and authorization ("allowed HERE?") are separate checks — add the matching `requireX` guard |
 | A field silently disappears / gets wiped to null after an update, no error thrown | JS `undefined` (a field never sent) was passed straight into a `pg` query, silently became SQL `NULL` | Validate required fields are present BEFORE calling the model; don't rely on the `CHECK` constraint to catch `NULL` — it won't |
+| `missing FROM-clause entry for table "..."` | A table-prefix typo on a column reference in a multi-table query (e.g. `application.status` instead of `applications.status`) | Check every table-prefix in the query is spelled identically, everywhere |
+| A valid, correctly-privileged user still gets `401` on a brand-new route, no other errors | A role guard (`requireAdmin`/`requireStudent`) is attached without `verifyToken` running first, so `req.user` is `undefined` | Add `verifyToken` before the role guard in the route's middleware list |
 
 ---
 
-*Part 2 updated: 2026-07-05 (Lessons 34–35 added: RBAC needs symmetric guards on both sides — `verifyToken` alone only proves "logged in," never "allowed here," and every guard needs an explicit `next()` on its pass path — plus the `undefined`→`NULL` silent-corruption trap, why `CHECK` constraints don't reject `NULL`, the `PUT`-full-replacement-vs-`PATCH`-`COALESCE` decision, and why multi-guard-clause validation is correct design, not bloat) | Mentor: Claude (Anthropic) | Course context: CMSC 127, UP Tacloban*
+*Part 2 updated: 2026-07-05 (Lesson 36 added: admin view-applicants feature — nested resource routing, the first JOIN query, ownership expressed as a `WHERE` filter that collapses "not found / not yours / empty" into one uniform response, a dead-code `!applications` check, and a repeat of the `verifyToken`-before-`requireAdmin` ordering bug) | Mentor: Claude (Anthropic) | Course context: CMSC 127, UP Tacloban*

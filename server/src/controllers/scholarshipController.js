@@ -117,7 +117,7 @@ async function remove(req, res) {
     const result = await closeScholarship(scholarshipId);
     return res.status(200).json({ result });
   } catch (error) {
-    console.log("error in removing: ", error);
+    console.error("error in removing: ", error);
     return res.status(500).json({ error: "something went wrong" });
   }
 }
