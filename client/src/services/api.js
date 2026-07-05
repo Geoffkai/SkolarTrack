@@ -13,14 +13,15 @@ async function apiFetch(path, options = {}) {
     },
   });
 
+  const data = await response.json();
   // fetch() does NOT throw on a 401/404/500 — it only throws on real network failure.
   if (!response.ok) {
-    throw new Error(`Request failed ${response.status}`);
+    throw new Error(data.error || `Request failed ${response.status}`);
   }
 
   // response is a Response OBJECT
   // hasn't been read/parsed yet. .json() reads it and parses it into real data.
-  return response.json();
+  return data;
 }
 
 export default apiFetch;
