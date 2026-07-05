@@ -16,13 +16,13 @@
 27. [Debugging Round 2: The Login Error Chain](#lesson-27-debugging-round-2)
 28. [The Request Lifecycle: Startup vs Request, and Middleware](#lesson-28-request-lifecycle)
 29. [Auth Middleware: verifyToken & requireAdmin (RBAC)](#lesson-29-auth-middleware)
-30. [The `req` Object & Request-Scoped Data](#lesson-30-req-object)
+30. [The `req` Object & Request-Scoped Data](#lesson-30-the-req-object)
 31. [POST vs GET Revisited](#lesson-31-post-vs-get-revisited)
-32. [Scholarship CRUD — `req.params`, REST Naming, and Query Discipline](#lesson-32-scholarship-crud)
-33. [Live-Testing Discipline — Proving RBAC and Soft Delete](#lesson-33-live-testing-discipline)
-34. [RBAC Needs Guards on Both Sides — `verifyToken` Isn't Enough](#lesson-34-rbac-both-sides)
-35. [Layered Validation — the `undefined` → `NULL` Trap and Guard-Clause Discipline](#lesson-35-layered-validation)
-36. [Admin View-Applicants — Nested Resources, JOINs, and Ownership-as-Filter](#lesson-36-view-applicants)
+32. [Scholarship CRUD — `req.params`, REST Naming, and Query Discipline](#lesson-32-scholarship-crud--reqparams-rest-naming-and-query-discipline)
+33. [Live-Testing Discipline — Proving RBAC and Soft Delete](#lesson-33-live-testing-discipline--proving-rbac-and-soft-delete)
+34. [RBAC Needs Guards on Both Sides — `verifyToken` Isn't Enough](#lesson-34-rbac-needs-guards-on-both-sides--verifytoken-isnt-enough)
+35. [Layered Validation — the `undefined` → `NULL` Trap and Guard-Clause Discipline](#lesson-35-layered-validation--the-undefined--null-trap-and-guard-clause-discipline)
+36. [Admin View-Applicants — Nested Resources, JOINs, and Ownership-as-Filter](#lesson-36-admin-view-applicants--nested-resources-joins-and-ownership-as-filter)
 
 *(Lessons 1–23 are in Part 1.)*
 

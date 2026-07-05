@@ -10,14 +10,14 @@
 
 ## Table of Contents (Part 3)
 
-37. [Why Centralize API Calls — `services/api.js`](#lesson-37-centralizing-api-calls)
-38. [JWT Storage Tradeoffs — `localStorage` vs `httpOnly` Cookies](#lesson-38-jwt-storage-tradeoffs)
-39. [Frontend Route Access Mirrors Backend RBAC](#lesson-39-frontend-route-access)
-40. [What "API" Actually Means — Two Different Meanings](#lesson-40-what-is-an-api)
-41. [Scaffolding with Vite — `npm create`, ESLint, and Why a Fake Folder Structure Doesn't Work](#lesson-41-vite-scaffolding)
-42. [JSX & Component Fundamentals — Self-Closing Tags, Capitalization, and Two Export Styles](#lesson-42-jsx-fundamentals)
-43. [Wiring React Router — `BrowserRouter`/`Routes`/`Route` and How Route-Order Differs From Express](#lesson-43-react-router)
-44. [`<Link>` and Client-Side Navigation — Why It's Not a Real Request](#lesson-44-link-navigation)
+37. [Why Centralize API Calls — `services/api.js`](#lesson-37-why-centralize-api-calls--servicesapijs)
+38. [JWT Storage Tradeoffs — `localStorage` vs `httpOnly` Cookies](#lesson-38-jwt-storage-tradeoffs--localstorage-vs-httponly-cookies)
+39. [Frontend Route Access Mirrors Backend RBAC](#lesson-39-frontend-route-access-mirrors-backend-rbac)
+40. [What "API" Actually Means — Two Different Meanings](#lesson-40-what-api-actually-means--two-different-meanings)
+41. [Scaffolding with Vite — `npm create`, ESLint, and Why a Fake Folder Structure Doesn't Work](#lesson-41-scaffolding-with-vite--npm-create-eslint-and-why-a-fake-folder-structure-doesnt-work)
+42. [JSX & Component Fundamentals — Self-Closing Tags, Capitalization, and Two Export Styles](#lesson-42-jsx--component-fundamentals--self-closing-tags-capitalization-and-two-export-styles)
+43. [Wiring React Router — `BrowserRouter`/`Routes`/`Route` and How Route-Order Differs From Express](#lesson-43-wiring-react-router--browserrouterroutesroute-and-how-route-order-differs-from-express)
+44. [`<Link>` and Client-Side Navigation — Why It's Not a Real Request](#lesson-44-link-and-client-side-navigation--why-its-not-a-real-request)
 
 *(Lessons 1–23 are in Part 1. Lessons 24–36 are in Part 2.)*
 

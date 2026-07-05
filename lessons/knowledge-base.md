@@ -16,7 +16,7 @@
 5. [What is `pg` (node-postgres)?](#lesson-5-what-is-pg-node-postgres)
 6. [What is `dotenv` and `.env` files?](#lesson-6-what-is-dotenv-and-env-files)
 7. [What is npm?](#lesson-7-what-is-npm)
-8. [Understanding `.env` Variables (JWT, PORT, etc.)](#lesson-8-understanding-env-variables)
+8. [Understanding `.env` Variables (JWT, PORT, etc.)](#lesson-8-understanding-env-variables-jwt-port-etc)
 9. [How Senior Engineers Start a Project](#lesson-9-how-senior-engineers-start-a-project)
 10. [Dev Tooling Setup & Claude vs GitHub vs Claude Code](#lesson-10-dev-tooling-setup)
 11. [Secret Safety & Git Tracking](#lesson-11-secret-safety-and-git-tracking)
