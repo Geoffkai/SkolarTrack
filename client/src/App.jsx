@@ -1,4 +1,4 @@
-import {BrowserRouter, Routes, Route} from 'react-router-dom'
+import {BrowserRouter, Routes, Route, Link} from 'react-router-dom'
 import Login from './pages/Login'
 import EditScholarship from './pages/EditScholarship'
 import AdminDashboard from './pages/AdminDashboard'
@@ -11,6 +11,11 @@ import Scholarships from './pages/Scholarships'
 function App() {
   return (
     <BrowserRouter>
+    <nav>
+      <Link to="/scholarships">Browse Scholarships</Link>
+      <Link to="/login">Login</Link>
+      <Link to="/register">Register</Link>
+    </nav>
       <Routes>
         <Route path="/register" element={<Register />}/>
         <Route path="/login" element={<Login />}/>
