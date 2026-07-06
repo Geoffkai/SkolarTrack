@@ -18,6 +18,14 @@
 42. [JSX & Component Fundamentals — Self-Closing Tags, Capitalization, and Two Export Styles](#lesson-42-jsx--component-fundamentals--self-closing-tags-capitalization-and-two-export-styles)
 43. [Wiring React Router — `BrowserRouter`/`Routes`/`Route` and How Route-Order Differs From Express](#lesson-43-wiring-react-router--browserrouterroutesroute-and-how-route-order-differs-from-express)
 44. [`<Link>` and Client-Side Navigation — Why It's Not a Real Request](#lesson-44-link-and-client-side-navigation--why-its-not-a-real-request)
+45. [Building `services/api.js` — Wrapping `fetch()`, `response.ok`, and Why `.json()` Matters](#lesson-45-building-servicesapijs--wrapping-fetch-responseok-and-why-json-matters)
+46. [Debugging Round 3: Connection Refused vs. CORS — Two Different Frontend-to-Backend Failures](#lesson-46-debugging-round-3--connection-refused-vs-cors-two-different-frontend-to-backend-failures)
+47. [React Hooks — Why Plain Variables Can't Track Input, `useState` vs. `useEffect`](#lesson-47-react-hooks--why-plain-variables-cant-track-input-usestate-vs-useeffect)
+48. [Building the Real Register Form — Controlled Multi-Field Forms, `htmlFor`, and Missing Fields](#lesson-48-building-the-real-register-form--controlled-multi-field-forms-htmlfor-and-missing-fields)
+49. [The Response-Body-Read-Twice Bug, and Register-vs-Auto-Login as a Deliberate Design Choice](#lesson-49-the-response-body-read-twice-bug-and-register-vs-auto-login-as-a-deliberate-design-choice)
+50. [`useNavigate` and the SPA Navigation Model — Why the URL Changes But Nothing Is Fetched](#lesson-50-usenavigate-and-the-spa-navigation-model--why-the-url-changes-but-nothing-is-fetched)
+51. [`ReferenceError`, Bare Identifiers vs. Strings, and Why a `catch` Block Can Hide a Real Bug](#lesson-51-referenceerror-bare-identifiers-vs-strings-and-why-a-catch-block-can-hide-a-real-bug)
+52. [Commit Granularity — Splitting Logically Distinct Changes Instead of One Bundled Commit](#lesson-52-commit-granularity--splitting-logically-distinct-changes-instead-of-one-bundled-commit)
 
 *(Lessons 1–23 are in Part 1. Lessons 24–36 are in Part 2.)*
 
@@ -440,6 +448,455 @@ The correct placement: **inside `<BrowserRouter>`, but as a sibling *outside* `<
 
 ---
 
+## Lesson 45: Building `services/api.js` — Wrapping `fetch()`, `response.ok`, and Why `.json()` Matters
+
+**Date learned:** 2026-07-06
+**Tags:** `fetch` `api.js` `response-object` `json` `day-9`
+
+With the routing skeleton proven, the next piece was making `services/api.js` (Lesson 37's rationale) into an actual working file — the first genuine `fetch()` code in the project.
+
+### Disambiguating "the API" one more time, concretely
+
+Before writing anything, it needed re-clarifying that `api.js` is **not** "the API" — it's a small client-side helper file. The real API is the running Express server on port 3000 (Lesson 40, Meaning 1). `api.js`'s only job is to be the one place that knows *how* to reach that real API — same restaurant-expediter framing as Lesson 37, just made concrete in actual code for the first time.
+
+### The `apiFetch` wrapper, built piece by piece
+
+```javascript
+// The one place this changes when deploying — swap this to the Railway URL on deployment
+const BASE_URL = "http://localhost:3000";
+
+// A shared wrapper around fetch() — every page calls this instead of writing fetch() directly
+async function apiFetch(path, options = {}) {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    // path gets glued onto BASE_URL (e.g. "/scholarships" -> "http://localhost:3000/scholarships")
+    // ...options spreads in anything the caller passed (method, body, etc.)
+    ...options,
+    headers: {
+      "Content-Type": "application/json", // tells the backend the body is JSON
+      ...options.headers, // lets a caller add extra headers later (e.g. Authorization)
+    },
+  });
+
+  // fetch() does NOT throw on a 401/404/500 — it only throws on real network failure.
+  if (!response.ok) {
+    throw new Error(`Request failed ${response.status}`);
+  }
+
+  // response is a Response OBJECT (status, ok, headers...) — the body hasn't been
+  // read/parsed yet. .json() reads it and parses it into the actual usable data.
+  return response.json();
+}
+
+export default apiFetch;
+```
+
+### `response.ok` — a shortcut for the 2xx family, and why `fetch()` doesn't throw on its own
+
+`response.ok` is a plain boolean, automatically `true` for any 2xx status code, `false` otherwise — a convenience check for exactly the "first digit = family" idea from Lesson 22.
+
+**The genuinely important, slightly counter-intuitive fact:** `fetch()` does **not** throw an error just because the server responded with a `401` or `404`. From `fetch()`'s point of view, a round-trip that got *any* HTTP response — even an error one — completed successfully. `fetch()` only throws for real network failures (unreachable server, no connection, DNS failure). This means `response.ok` has to be checked **manually**, every time — skipping it would let an error response's JSON body silently flow through code that expects real data, the same category of oversight as forgetting to check `bcrypt.compare`'s return value or skipping a `!user` check after a lookup.
+
+| | On the backend (Express) | On the frontend (`fetch`) |
+|---|---|---|
+| Who decides success/failure | You, explicitly, via `res.status(...)` | The server already decided — you're just reading it |
+| How you check it | N/A — you're setting it | `response.ok` (shortcut) or `response.status` (exact code) |
+
+### `response` is an object, not a string — and `.json()` is what unwraps it
+
+A live misconception caught and corrected this session: `response` is **not** a string. It's a real `Response` **object** with properties (`.status`, `.ok`, `.headers`) and methods (`.json()`), wrapping a body that hasn't actually been read yet. Calling `.json()` reads that body and parses it from raw JSON text into a genuine JavaScript object or array — the actual usable data.
+
+**The closest anchor already known from the backend:** this is the same relationship as `result` (the whole `pg` query result object — has `.rows`, `.rowCount`) versus `result.rows` (the actual array you want). `result` is the wrapper; `.rows` is the useful part inside it. `response` is the wrapper; `.json()` gets the useful part out of it — the only difference being `.rows` is a plain property, while `.json()` is an async method, because reading a network response body is itself an operation that takes real time.
+
+### Why `.json()` happens inside `apiFetch`, once, and not in every caller
+
+If `apiFetch` returned the raw `response` instead, every single page calling it would have to remember to call `.json()` themselves — moving the repetition up one level instead of eliminating it, defeating the whole point of centralizing (Lesson 37). Doing it once, here, means every caller gets real, ready-to-use data directly.
+
+### What's deliberately not built yet
+
+- No `Authorization` header logic yet — protected routes will need `Bearer <token>` attached, once a real login exists to produce a real token.
+- No reading of the error body on failure — a `401` currently just throws a generic `Request failed 401`, discarding the backend's actual `{ error: "..." }` message. Fine for now; worth revisiting once real error messages need to show in the UI.
+
+> One line: **`api.js` is a client-side helper, not "the API" itself — the real API is the running Express server; `apiFetch` centralizes the base URL, headers, and error-checking in one place; `response.ok` must be checked manually since `fetch()` only throws on genuine network failure, never on a server's own error status code; and `response` is an object wrapping an unread body — `.json()` reads and parses it into real usable data, done once inside the wrapper so every caller gets clean data back.**
+
+---
+
+## Lesson 46: Debugging Round 3 — Connection Refused vs. CORS, Two Different Frontend-to-Backend Failures
+
+**Date learned:** 2026-07-06
+**Tags:** `debugging` `cors` `connection-refused` `middleware` `fetch` `day-9`
+
+The first real test of `apiFetch` against the live backend surfaced two genuinely new failure modes in sequence — neither one a code bug in the sense of the earlier debugging lessons (23, 27), but both essential to recognize by their exact wording.
+
+### Failure 1 — `ERR_CONNECTION_REFUSED`
+
+```
+GET http://localhost:3000/scholarships
+net::ERR_CONNECTION_REFUSED
+```
+
+**What it means, precisely:** nothing is listening on port 3000 at all. Not a 401, not a 404 — the browser couldn't even establish a connection. The cause was simple: the Express server (`cd server && npm run dev`) wasn't running in a separate terminal at the time of the test.
+
+**The structural lesson, worth remembering going forward:** a full-stack dev session now requires **two servers running simultaneously, in two separate terminals** — Vite on port 5173 (the frontend) and Express on port 3000 (the backend). Forgetting to start one of them produces this exact error.
+
+**Why this is the error category `fetch()` *does* throw on:** per Lesson 45, `fetch()` only throws for genuine network failures. A connection that's actively refused (nothing there to respond at all) is exactly that category — landing in a `.catch()` block as `TypeError: Failed to fetch`, distinct from a 401/404 which would land in the `!response.ok` branch instead, inside a successfully-received response.
+
+### Failure 2 — CORS
+
+Once the backend was running, a new and different error appeared:
+
+```
+Access to fetch at 'http://localhost:3000/scholarships' from origin 'http://localhost:5173'
+has been blocked by CORS policy: Response to preflight request doesn't pass access control check:
+No 'Access-Control-Allow-Origin' header is present on the requested resource.
+```
+
+**What CORS actually is:** Cross-Origin Resource Sharing — a browser security rule that blocks JavaScript on one **origin** (protocol + domain + port, all three) from freely calling a server on a *different* origin, unless that server explicitly grants permission. `http://localhost:5173` (React/Vite) and `http://localhost:3000` (Express) count as **different origins** to the browser, purely because the port differs — despite both saying "localhost." This is the first time in the project two different ports have needed to talk to each other, which is why this hadn't come up before.
+
+**Why the rule exists at all:** without it, a malicious website open in another tab could have its JavaScript quietly send requests to any other site's API — a bank's, an email provider's — using the browser's existing cookies/session to impersonate the logged-in user. CORS closes that path by requiring servers to explicitly opt in to being called cross-origin.
+
+**Important distinction, easy to conflate:** CORS has nothing to do with `verifyToken`/`requireAdmin` RBAC. It's a browser-level block that happens *before* a request even reaches Express route handlers — a completely different layer, enforced by the browser itself, independent of anything the backend's own auth logic decides.
+
+**The "preflight request" mentioned in the error:** for certain cross-origin requests, the browser first sends a quick `OPTIONS` request asking "is this origin welcome here?" *before* sending the real request. That preflight is what was failing — no answer was coming back approving `localhost:5173`.
+
+### The fix: `cors` middleware
+
+```bash
+npm install cors
+```
+
+```javascript
+// app.js
+const cors = require("cors");
+app.use(cors());
+```
+
+**Confirmed as middleware, correctly reasoned out from the shape alone (`app.use(...)`) before being told:** `cors()` is a **global** guard (Lesson 28's distinction) — it runs on every request, checking whether the requesting origin is allowed, and answering the browser's preflight check with the right `Access-Control-Allow-Origin` header. Once the browser sees that header, it lets the real request through to the actual route handler.
+
+**Why it has to sit above the routes, same reasoning as `express.json()`:** it's a gatekeeper — it has to clear (or reject) a request before anything else touches it.
+
+```javascript
+app.use(cors());          // global — checked first
+app.use(express.json());  // global — parses the body next
+app.use("/auth", authRoutes);
+```
+
+**`cors()` with no arguments allows any origin** — fine for local development, but a detail flagged for Day 14: a real production deploy should lock this down to the actual deployed frontend's domain, not left wide open indefinitely.
+
+### The end-to-end proof
+
+After both fixes, the console showed `Got data: Array(1)` with a real scholarship row pulled from Neon — the full chain (`React → apiFetch → CORS cleared → Express → PostgreSQL → back to the browser`) proven working for the first time, the frontend equivalent of Lesson 9's `/health` check finally closing the loop between both halves of the project.
+
+> One line: **`ERR_CONNECTION_REFUSED` means nothing is listening on that port at all (the backend server wasn't running) and is the genuine-network-failure category `fetch()` throws on directly; a CORS error means the backend *is* running but hasn't granted permission for this specific origin (port) to call it, a browser-enforced security layer unrelated to any backend auth logic, fixed with the global `cors()` middleware sitting above the routes exactly like `express.json()`; and getting real data back through the full chain for the first time is the frontend/backend equivalent of the original `/health` proof.**
+
+---
+
+## Lesson 47: React Hooks — Why Plain Variables Can't Track Input, `useState` vs. `useEffect`
+
+**Date learned:** 2026-07-06
+**Tags:** `hooks` `usestate` `useeffect` `re-render` `fundamentals` `day-9`
+
+Before building the real `Register.jsx` form, the actual mechanics of why a plain JS variable can't track form input needed to be understood from first principles — not just "use `useState` because React says so."
+
+### Why a plain `let` variable silently fails to track input
+
+```jsx
+function Register() {
+  let email = "";
+  return <input value={email} onChange={(e) => { email = e.target.value; }} />;
+}
+```
+
+**The core fact to internalize: every re-render is React calling the component function again, completely fresh, from the top — not the same function call continuing to run.** A component is just a function (Lesson 42); "rendering" means React calls it and uses whatever JSX comes back this time.
+
+Local variables inside any function — in any language, including the Java background already known — do not survive between *separate calls* of that function. `let email = ""` runs fresh every single time `Register()` is called. Tracing what actually happens with a plain variable:
+
+1. First render: `email` starts as `""`.
+2. User types "g": the `onChange` handler runs `email = "g"` — this genuinely changes the variable, in memory, for a moment.
+3. **But nothing tells React to re-render** — a plain reassignment is invisible to React's tracking system. The screen still shows whatever was drawn in step 1.
+4. If a re-render *does* eventually happen for some unrelated reason, `Register()` runs again from scratch — `let email = ""` executes again, **resetting** `email` back to empty, erasing the "g" entirely, because that value only ever lived inside the now-finished previous function call.
+
+**So it's not accurate to say "nothing happens" — a value does change, briefly and invisibly, and then gets wiped out the next time the component happens to re-render for any other reason.**
+
+### What a Hook actually is
+
+**A Hook is a special function, provided by React, that lets a component tap into capabilities a plain function structurally cannot have on its own** — remembering a value across separate function calls, or running code at a specific point in the rendering lifecycle. Every Hook's name starts with `use` (`useState`, `useEffect`, and later `useParams`/`useNavigate`) — a deliberate naming convention signaling "this reaches into React's internals," not an ordinary function.
+
+**One firm rule, enforced by `eslint-plugin-react-hooks` (Lesson 41):** Hooks must be called plainly at the top level of a component — never inside an `if`, a loop, or a nested function. React tracks Hooks by the order they're called across renders, so conditional calling breaks that tracking.
+
+### `useState` — a value that survives across renders
+
+```jsx
+const [email, setEmail] = useState("");
+```
+
+- `useState("")` gives back exactly two things: the current value, and a function for changing it. `const [email, setEmail] = ...` is plain JS array destructuring (nothing React-specific) pulling them out by position — the names are chosen by the developer, but `[thing, setThing]` is the standard convention.
+- **Crucially, the value lives outside any single function call, in React's own internal storage, tied to this specific component instance.** Calling `setEmail("g")` does two things: (1) updates React's *stored* value for this slot, and (2) **schedules a re-render.** On the next call to `Register()`, `useState("")` doesn't reset to `""` — React recognizes a stored value already exists for this slot and hands that back instead.
+- **The setter is never optional or bypassable** — `email` itself must never be reassigned directly (`email = "x"` — often disallowed outright since it's declared `const`). The *only* sanctioned way to change it is calling `setEmail(...)`.
+
+**The precise, correct direction of causation, worth stating explicitly since it's easy to get backwards:** it is NOT "something changes, therefore React re-renders." It is **"calling the setter function is what causes the re-render"** — a deliberate signal sent to React, not an automatic reaction to data being different. Nothing else triggers a re-render — not time passing, not a variable being reassigned, not touching the DOM directly.
+
+| | Plain `let` | `useState` |
+|---|---|---|
+| Where the value lives | Inside the function call — dies when the call ends | Outside the function, in React's own memory, tied to this component |
+| Survives a re-render? | No — resets to its initial value every time | Yes — persists, handed back on the next call |
+| Does changing it cause a re-render? | No — invisible to React | Yes — that is the entire job of the setter function |
+
+**A useful anchor already known from the backend:** this parallels `req.user` (Lesson 30) — a property surviving because it's attached to the *same* `req` object handed forward through the whole request, rather than being a local variable scoped to just one function call that vanishes when that function returns. `useState`'s stored value is conceptually similar: it lives somewhere outside the current function invocation specifically so it can persist and be handed back later.
+
+### `useEffect` — running code automatically, at a controlled moment, separate from rendering itself
+
+```jsx
+useEffect(() => {
+  apiFetch("/scholarships")
+    .then((data) => console.log("Got data:", data))
+    .catch((err) => console.error("Error:", err));
+}, []);
+```
+
+Two arguments:
+1. **A function** — the actual code to run. This is called a **side effect**: something reaching *outside* the component (a network request here) rather than just computing what to display.
+2. **A dependency array** — `[]` (empty) means *"run this once, right after the component's first render, and never again on subsequent re-renders."*
+
+**Why this can't just be plain code sitting in the function body:** every render is a fresh call to the component function. Code placed directly in the body (not inside `useEffect`) would re-run on **every single render** — including every re-render triggered by an unrelated `useState` update, such as typing a single character into an input elsewhere on the page. That would mean firing a fresh network request on every keystroke. `useEffect` with `[]` is specifically the tool for saying "this is a side effect, not part of computing the display — run it once, on first load, and don't repeat it just because something else caused a re-render."
+
+### `useState` vs. `useEffect`, side by side
+
+| | `useState` | `useEffect` |
+|---|---|---|
+| What it provides | A value that persists across renders, plus a setter | A function that runs automatically, at a controlled moment |
+| Triggers a re-render itself? | Yes, when the setter is called | Not by itself (though code inside it might call a setter, which would) |
+| When does its code actually run? | Reading the value happens on every render; nothing "runs" on its own | Runs *after* a render, gated by the dependency array — `[]` = once, after the first render only |
+| Used for, in this project | Tracking what's typed into a form field | The one-time test call proving `apiFetch` could reach the real backend |
+
+**A concrete distinction worth flagging:** the test `useEffect` used to prove `apiFetch` worked (Lesson 46) is scaffolding, not something a real registration form needs — the real form only calls `apiFetch` **on submit**, inside a click/form event handler, a completely different trigger than "run once when the page loads."
+
+> One line: **every re-render is a fresh call to the component function, so a plain local variable can't survive between renders and any change to it gets silently erased the next time something else causes a re-render; `useState` solves this by storing the value outside the function call, in React's own memory, and its setter is what actually *causes* the re-render (not the other way around); `useEffect` solves a different problem — running a side effect (like a network call) at a controlled moment (`[]` = once, after first render) instead of on every render; and both are Hooks — React-provided functions, always named `use...`, that must be called plainly at a component's top level, never inside conditionals or loops.**
+
+---
+
+## Lesson 48: Building the Real Register Form — Controlled Multi-Field Forms, `htmlFor`, and Missing Fields
+
+**Date learned:** 2026-07-06
+**Tags:** `forms` `controlled-inputs` `htmlfor` `closures` `validation` `day-9`
+
+With `useState`/`useEffect` understood, the actual `Register.jsx` form got built — the first real, multi-field controlled form in the project, and the first place a submit handler needed to reach into a component's own state.
+
+### The controlled input pattern, scaled to a whole form
+
+One field, the pattern already known:
+```jsx
+<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+```
+`value={email}` means React fully controls what's displayed — not the browser's default input behavior. `onChange` fires on every keystroke, immediately syncing state to match. A full form is just this same pairing repeated once per field, each with its own `useState`.
+
+### JSX that isn't returned is thrown away — a live example
+
+An early draft had the `<form>` JSX sitting as a bare expression in the middle of the function body, with a separate `return <h1>...</h1>;` below it. **JSX that isn't `return`ed (or assigned/passed somewhere) is computed and immediately discarded** — the same as writing `5 + 5;` alone on a line and never using the result. Only what's actually inside the `return` statement is what React sees and renders. The fix was moving the whole `<form>` block to be the thing returned.
+
+### Where `handleSubmit` has to live — closures, not an arbitrary rule
+
+A submit handler needs `email`, `name`, `password`, `role` (and their setters) to do its job — but those only exist as local variables *inside* `Register()`, created fresh by each call to `useState` during that specific render. A function defined **outside** `Register` would have no way to reach them at all.
+
+This is ordinary JavaScript scoping, not a React-specific rule: a function defined *inside* another function can see and use that outer function's local variables — this is called a **closure**. A function defined outside cannot see them. Since a component's state only exists during its own function call, anything needing that state must be defined inside it, where it can "see" it.
+
+### The `htmlFor`/`id` mismatch bug — a copy-paste trap
+
+```jsx
+<label htmlFor="email">Email</label>
+<input id="email" ... />                {/* ✅ matches */}
+
+<label htmlFor="email">Name</label>      {/* ❌ still says "email" */}
+<input id="name" ... />                   {/* but id is "name" */}
+```
+
+Copying a label/input pair and only updating the visible text, not the `htmlFor`/`id` values, produces a working-looking but subtly broken form. `htmlFor="X"` tells the browser "this label describes the input with `id="X"`," enabling a real accessibility feature — clicking the label text focuses the matching input. With the mismatch, clicking "Name" would incorrectly focus the **email** input instead. Not a crash, not visible unless actually tested by clicking labels — a genuinely easy bug to ship unnoticed.
+
+### A field the backend required that the form didn't send — reading the real error properly
+
+The first submit attempt returned `400 Bad Request`. The static error message returned by the backend read: `"email, password, role are required"` — which, misleadingly, listed **all three** fields the guard checks, not specifically which one was actually missing:
+
+```javascript
+// backend
+if (!email || !password || !role) {
+  return res.status(400).json({ error: "email, password, role are required" });
+}
+```
+
+**The precise lesson:** an `||` guard's error message, if written as one static string naming every field it checks, does not tell you which specific field tripped the check — only that *at least one* did. It's easy to misread a message like this as "all three are currently missing" when the truth might be (and here, was) just one. The real missing field (`role`) had been correctly suspected earlier, purely by re-reading the actual controller code — worth remembering that checking the source directly settles ambiguity a message's wording can't.
+
+**The fix:** the form genuinely had no way to submit `role` at all — a `<select>` was added, with `useState("student")` as a deliberately-chosen default (most registrants being students, per the actual spec — a product decision worth naming, not silently defaulting into).
+
+> One line: **JSX only renders if it's actually returned, not just written somewhere in the function body; a submit handler must live inside the component to access its state via closures — ordinary JS scoping, not a React-specific rule; a copy-pasted `<label htmlFor>` that isn't updated to match its input's `id` silently breaks the label's click-to-focus behavior without throwing any error; and a combined `||` validation guard's static error message can list every field it checks without indicating which one actually failed — re-check the source directly when a message is ambiguous.**
+
+---
+
+## Lesson 49: The Response-Body-Read-Twice Bug, and Register-vs-Auto-Login as a Deliberate Design Choice
+
+**Date learned:** 2026-07-06
+**Tags:** `fetch` `response-stream` `debugging` `design-decision` `day-9`
+
+Once the `role` field was added and registration succeeded on the backend (confirmed by checking the database directly), a new, purely client-side error appeared — followed by a genuine design question worth deciding on purpose rather than defaulting into.
+
+### The bug: reading a `Response` body twice
+
+```javascript
+const data = await response.json();   // first read — succeeds
+
+if (!response.ok) {
+  throw new Error(data.error || `Request failed ${response.status}`);
+}
+
+return response.json();   // ❌ second read on the SAME response — throws
+```
+
+Error produced:
+```
+TypeError: Failed to execute 'json' on 'Response': body stream already read
+```
+
+**The precise mechanism:** a `Response`'s body is a **stream**, and reading it **consumes** it — not like reading a property twice (harmless), but like opening a sealed envelope once: it cannot be "re-opened" to get the same letter out again. `.json()` had already been called once (correctly, to support the new error-reading logic from Lesson 46), but an old `return response.json();` line — a leftover from before that fix — was still calling it a second time on the way out, on the success path. Since the error only threw *after* the `!response.ok` check passed, this specific bug only manifested on **successful** requests, which is exactly why it didn't show up during the earlier `400` failures.
+
+**The fix:** read the body exactly once, store it, and reuse that stored value everywhere after:
+```javascript
+const data = await response.json();
+
+if (!response.ok) {
+  throw new Error(data.error || `Request failed ${response.status}`);
+}
+
+return data;   // reuse what was already parsed — never call .json() again on this response
+```
+
+**A useful anchor to this bug's category:** unlike, say, `result.rows` from `pg` (a plain property you can read as many times as you like), `response.json()` is an operation with a side effect — it drains something that can only be drained once. Worth remembering as a general caution around any stream-like API: read once, keep the result, don't call the read method again expecting the same data.
+
+### A genuine design decision: separate login step vs. auto-login after registering
+
+The project's `register` deliberately does **not** return a token — a user has to make a separate trip to `/login` after creating an account, rather than being auto-logged-in immediately. Worth evaluating this on purpose rather than assuming either approach is "the" correct one, since both are legitimate, real-world patterns:
+
+**Arguments for the separate-login design (what this project has):**
+- Cleaner separation of responsibilities — `register` only creates a user, `login` only verifies + issues a token. Matches the "each function does one job" discipline already followed throughout the backend (Lesson 21).
+- Immediately re-proves the credential works, catching a typo'd password early.
+- Common in real institutional/government-adjacent software (relevant given the project's actual target audience) — often because email verification sits between the two steps in production systems.
+
+**Arguments for auto-login instead:**
+- Slightly less friction for the user — one fewer form immediately after filling one out.
+- Common in fast, consumer-growth-oriented apps prioritizing minimal steps.
+
+**Why the current choice fits this specific project:** given `MISSION.md`'s framing (a portfolio piece demonstrating full-stack fundamentals, not a consumer growth product) and the backend's consistent one-job-per-function discipline throughout, the separate-login design is a reasonable, deliberate fit — not a shortcut or an oversight to "fix" later.
+
+**The consequence for frontend work still ahead:** since registration doesn't auto-login, `Register.jsx` needs to explicitly redirect the user to `/login` on success, rather than storing a token and treating them as logged in immediately. That redirect requires `useNavigate` — a Hook for triggering navigation from code rather than a user click — not yet covered, and the natural next piece of frontend work.
+
+> One line: **a `Response` body is a stream that can only be read once — calling `.json()` a second time throws, so read it once into a variable and reuse that variable everywhere after; and choosing whether registration should auto-login or require a separate login step is a real, evaluable design decision (both patterns are legitimate) rather than something to default into — this project's separate-login choice fits its one-job-per-function backend discipline and its portfolio-not-consumer-product framing.**
+
+---
+
+## Lesson 50: `useNavigate` and the SPA Navigation Model — Why the URL Changes But Nothing Is Fetched
+
+**Date learned:** 2026-07-06
+**Tags:** `react-router` `useNavigate` `spa` `history-api` `day-9` `day-10`
+
+Building the register→login redirect surfaced a much bigger question worth nailing down properly: what does "navigating" even mean in a single-page app, and how is that different from the request/response cycle already deeply understood from the backend?
+
+### The kitchen metaphor
+
+A traditional website is a restaurant where **the recipe book (code) lives in the kitchen, written ahead of time, before any customer walks in.** Every time a customer orders ("clicks a link"), the chef re-opens that same book and cooks a brand new plate from scratch — that's the server building and returning a whole new HTML document, every single click.
+
+A React SPA changes the deal: the **entire recipe book gets copied into your own kitchen at home** the first time you visit (the JS bundle downloads once). After that, you don't call the restaurant back for a new plate every time — you already have the recipe. You only call the restaurant when you need fresh **ingredients** (data) — a scholarship list, a login result — never for the recipe itself again.
+
+### Two separate things that live in different places
+
+A recurring confusion: "is the code stored in the database?" No — **code** (`.jsx` files, or a traditional server's HTML templates) is a file that already exists on disk, written ahead of time by the developer. **Data** (a user's email, a scholarship's deadline) is rows in the database, fetched at request-time. A traditional server's job per-request is gluing the two together (read the template file, query the DB, combine, send HTML back). A React SPA does the "gluing code together" step once, ahead of time, at build time (`npm run build`, Day 14) — the finished bundle is just static files Vercel hosts. The *only* thing still crossing the network after that first load is data, as plain JSON, through `apiFetch` — never HTML, never UI.
+
+### What `useNavigate` actually does — and the real/fake split
+
+`<Link>` is a signpost the user clicks. `useNavigate` hands the *code* the equivalent power — call `navigate("/login")` from inside `handleSubmit`, no click involved, and React Router does what a `<Link to="/login">` click would have done.
+
+Importantly, the URL change is **real, not simulated**: `navigate()` calls the browser's History API (`pushState` under the hood), which genuinely rewrites the address bar, adds a real back/forward history entry, and produces a bookmarkable URL. What's *not* real is any accompanying network request. Normally (in the old model) "the address bar changes" and "a new page gets fetched from a server" are bundled together as one event. React Router splits them apart: it keeps the URL change, drops the fetch.
+
+This means navigating to `/login` and *submitting* the login form are two entirely separate events that just happen to sit next to each other in the flow:
+1. **Rendering `/login`** (via `<Link>` or `navigate()`) — pure UI swap, zero network, the server never even knows it happened.
+2. **Submitting the login form** — `handleSubmit` fires, `apiFetch("/auth/login", ...)` makes the real network call, server checks credentials, sends back a token.
+
+### The wrinkle to remember for Day 14 (not to solve now)
+
+Hitting the browser's **refresh** button always sends a real request to the server, SPA or not — refresh doesn't know or care about client-side routing. Right now, Vite's dev server already handles this transparently. On deploy day, **Vercel needs an explicit rewrite rule** telling it "for any path that isn't a real static file, just serve `index.html` and let React Router take over client-side" — otherwise refreshing on anything but `/` would 404. Flagged now so it doesn't look like a mystery bug later.
+
+### The import bug this surfaced — named exports have to come from the module that actually exports them
+
+`useNavigate` is **not** part of core React — it's exported by `react-router-dom`, a separate library installed on top of React specifically for routing. `useState`/`useEffect` come from `'react'`; `useNavigate`/`useParams`/`<Link>`/`<BrowserRouter>` all come from `'react-router-dom'`. Importing `useNavigate` from `'react'` is the ES-module-import version of Lesson 23's `require`/`module.exports` shape mismatch — asking a box for something that was never packed inside it. The fix isn't logic — it's making sure each named import is pulled from the module that actually defines it.
+
+> One line: **the SPA bundle (code) downloads once and lives in the browser like a copied recipe book; `navigate()` genuinely changes the URL via the History API but triggers zero network activity on its own — a network request only happens when a *separate* piece of code (`apiFetch` inside a submit handler) explicitly makes one; and `useNavigate` must be imported from `react-router-dom`, not `react`, since core React never defined it.**
+
+---
+
+## Lesson 51: `ReferenceError`, Bare Identifiers vs. Strings, and Why a `catch` Block Can Hide a Real Bug
+
+**Date learned:** 2026-07-06
+**Tags:** `debugging` `referenceerror` `localstorage` `try-catch` `day-10`
+
+Building `Login.jsx`'s success handler produced a bug that *looked* like nothing happened — no visible crash, no red overlay — which turned out to be one of the more important debugging lessons so far, precisely because it hid so well.
+
+### The bug: an unquoted key
+
+```javascript
+localStorage.setItem(token, data.token);   // ❌ token is not a string here — it's a variable reference
+```
+
+`localStorage.setItem(key, value)` expects **two strings**: `key` is an arbitrary label you choose for where the value gets stored, `value` is what gets stored under it. Written bare and unquoted, `token` is JavaScript trying to look up a **variable** named `token` — and nothing in the component ever declared one (the actual token lives at `data.token`). Reading an identifier that was never declared **always throws** — a `ReferenceError: token is not defined` — with no exceptions, in every mode.
+
+### Why it looked silent — the `catch` block was doing its job
+
+The `ReferenceError` fired immediately, inside the `try` block, and was caught by the component's own `catch (error) { console.error("Login failed:", error); }`. Nothing was actually silent at the JS-engine level — the error was loud and real. It just got funneled into a generic log line that looks *identical* whether the real cause is "wrong password" (a legitimate `401`, expected) or "there's an actual bug in my code" (a `ReferenceError`, not expected at all). Without opening the browser console and reading what `error` actually contains, both cases present themselves as the exact same "Login failed" — worth remembering as a general caution: **a `catch` block groups every kind of failure under one handler; skimming past it without reading the real error text can hide a genuine bug behind what looks like ordinary, expected failure.**
+
+### The fix, and the proof it actually worked
+
+```javascript
+localStorage.setItem("token", data.token);   // ✅ "token" is the key (a string label), data.token is the value
+```
+
+Confirmed by actually inspecting storage directly (DevTools → Application → Local Storage → the site's origin) rather than trusting the absence of a visible error: a real `token` key appeared, holding a genuine JWT string starting with `eyJ` — the recognizable base64'd `{"alg":"HS256",...}` header from Lesson 20, now seen for real instead of just on jwt.io. Proof-by-direct-inspection, not proof-by-nothing-broke — the same discipline as Lesson 26's soft-delete verification (a `200` response alone never proves a write actually happened; go look at the actual data).
+
+> One line: **a bare, unquoted identifier is a variable lookup, not a string — if that variable was never declared, JS throws a `ReferenceError` immediately, every time, with no silent-failure mode; a `try/catch` can make a real bug look identical to an expected failure unless you actually read what's inside the caught `error`; and confirming a fix worked means inspecting the real data directly (DevTools' Local Storage tab), not just noticing that nothing visibly broke.**
+
+---
+
+## Lesson 52: Commit Granularity — Splitting Logically Distinct Changes Instead of One Bundled Commit
+
+**Date learned:** 2026-07-06
+**Tags:** `git` `version-control` `commit-hygiene` `workflow` `day-10`
+
+With the register→login→token-storage loop fully working, five files sat staged at once in VS Code's Source Control panel — a natural moment to pause on *how* to commit, not just *that* to commit, since the files staged together weren't actually one kind of change.
+
+### Three different kinds of change, sitting in one pile
+
+- **Real feature work:** `Login.jsx` and `Register.jsx` (the actual login/register flow).
+- **Cleanup/deletion:** leftover `App.jsx`/`main.jsx` under `client_old/` — dead weight from the earlier fake-scaffold mistake (Lesson 41), unrelated to the feature work.
+- **Documentation:** an update to the lesson timeline file — unrelated to both of the above.
+
+### Why bundling them into one commit is a real (if minor) cost
+
+A commit's message is supposed to describe what that commit did. `feat: implement Login and Register components...` is *true* of two of the five staged files, but says nothing about a deletion or a docs update quietly riding along inside it. Months later, `git log` or `git blame` on that deleted folder, or on the docs file, would point at a commit whose message never mentions either — the history technically has the information, but it's buried somewhere a future search wouldn't think to look.
+
+### The principle: one commit, one coherent story
+
+An **atomic commit** — one whose changes all serve a single, describable purpose — keeps `git log` genuinely useful as a record, not just a technically-complete one. This project's own commit history already showed this discipline being followed elsewhere (separate `feat:`/`fix:` entries for separate pieces of work); the fix here is just noticing when the *staging area* has drifted away from that habit, not learning a brand new rule.
+
+**The practical move:** stage and commit in groups that match the actual kinds of change, rather than committing everything just because it happened to be sitting there together:
+```
+feat: complete register-to-login flow with token storage
+chore: remove leftover client_old scaffold
+docs: update lesson timeline through Lesson 50
+```
+`chore:` and `docs:` are the same conventional-commit-prefix family as the `feat:`/`fix:` already in use — maintenance and documentation-only changes get their own category rather than being folded into feature work.
+
+### The tradeoff, named honestly
+
+For a solo portfolio project, committing all five files together in one commit isn't a real mistake — it's a legitimate trade of a slightly messier `git log` for slightly less ceremony. Worth naming as a deliberate choice if that's the call made, the same way `localStorage`-over-`httpOnly-cookies` (Lesson 38) was named as a deliberate, acceptable tradeoff rather than an oversight — not something to feel obligated to "fix" every single time.
+
+> One line: **a commit's message should describe everything actually staged inside it — bundling unrelated feature work, cleanup, and docs changes into one commit buries the smaller changes from future `git log`/`git blame` searches; splitting into `feat:`/`chore:`/`docs:` commits (mirroring prefixes already used in this project's own history) keeps history genuinely searchable; and for a low-stakes solo project, choosing not to split is a legitimate, namable tradeoff rather than a mistake.**
+
+---
+
 ## Part 3 Cheatsheet Additions
 
 ### New terms
@@ -475,6 +932,32 @@ The correct placement: **inside `<BrowserRouter>`, but as a sibling *outside* `<
 | client-side navigation | Clicking a `Link` updates the address bar (via the History API) and triggers `Routes` to re-match and render a different component — no actual network request is sent, unlike a plain `<a href>` |
 | History API | The browser feature `Link` uses to change what's shown in the address bar without triggering a real page reload |
 | URL path separator (`/`) | Inside a URL's path, `/` just separates segments (e.g. `scholarships` from `1` in `/scholarships/1`) — a bare `/` means "the root path" |
+| `apiFetch` / `services/api.js` | The actual wrapper function around `fetch()` — attaches base URL + headers, checks `response.ok`, and returns parsed JSON so every caller gets real data directly |
+| `response.ok` | Boolean shortcut on a `fetch()` `Response` — `true` for any 2xx status, `false` otherwise; must be checked manually since `fetch()` never throws on its own for 4xx/5xx |
+| `Response` object vs. body | `response` is an object wrapper (`.status`, `.ok`, `.headers`) around a body that hasn't been read yet; `.json()` reads and parses that body into real, usable data — same relationship as `pg`'s `result` vs. `result.rows` |
+| `ERR_CONNECTION_REFUSED` | Nothing is listening on the target port at all (e.g. backend server isn't running) — a genuine network failure, the category `fetch()` DOES throw on |
+| CORS (Cross-Origin Resource Sharing) | Browser security rule blocking JS on one origin (protocol+domain+port) from calling a server on a different origin unless that server explicitly allows it — different ports on "localhost" still count as different origins |
+| preflight request | An automatic `OPTIONS` request the browser sends before certain cross-origin requests, asking "is this origin allowed?" — what CORS errors are actually about |
+| `cors` middleware | `app.use(cors())` — global middleware that answers the preflight check with the right header, letting the real request through; must sit above the routes, same as `express.json()` |
+| Hook | A React-provided function (always named `use...`) that lets a component do things a plain function can't — remember values across renders (`useState`) or run code at a controlled lifecycle moment (`useEffect`); must be called plainly at the top level, never in conditionals/loops |
+| re-render | React calling the component function again, fresh, from the top — NOT the same function call continuing; this is why plain local variables reset every time |
+| `useState(initial)` | Returns `[value, setValue]` — a value that survives across renders (stored in React's own memory) plus a setter; calling the setter is what CAUSES a re-render, not the other way around |
+| `useEffect(fn, deps)` | Runs `fn` as a side effect after a render, gated by the dependency array — `[]` means "once, after the first render only," used for things like an initial data fetch, not for things that belong in the render itself |
+| side effect | Code that reaches outside the component (a network request, a timer, a subscription) rather than just computing what to display — belongs inside `useEffect`, not directly in the function body |
+| closure | A function defined inside another function can see and use that outer function's local variables (like state from `useState`) — a function defined outside cannot; this is why a submit handler must live inside its component |
+| JSX not returned = discarded | JSX sitting in a function body but not part of the `return` statement (or assigned/passed elsewhere) is computed and immediately thrown away, same as an unused expression |
+| `htmlFor`/`id` mismatch | A `<label>`'s `htmlFor` must exactly match its input's `id` for click-to-focus accessibility to work — a copy-pasted label with an unedited `htmlFor` silently breaks this with no error |
+| ambiguous `||` guard message | A validation check like `if (!a \|\| !b \|\| !c)` with one static combined error message doesn't indicate which field actually failed — only that at least one did; check the source directly when unsure |
+| `Response` body stream | A `fetch()` response body can only be read once via `.json()` — calling it a second time throws `body stream already read`; read once, store the result, reuse the stored value |
+| register vs. auto-login | A genuine, evaluable design decision — requiring a separate login after registering (cleaner separation of concerns, re-proves the credential) vs. auto-issuing a token on register (less friction) — neither is universally "correct" |
+| `useNavigate` | Hook (from `react-router-dom`, not `react`) that returns a function for triggering route changes from code, not a click |
+| History API / `pushState` | The real browser mechanism `<Link>` and `navigate()` both use to change the URL and add a history entry, without a network request |
+| SPA rewrite rule | A deploy-time config (needed on Vercel, Day 14) telling the host to serve `index.html` for any non-file path, so refresh/direct-URL-access doesn't 404 on client-side-only routes |
+| `ReferenceError` | Thrown immediately when JS tries to read an identifier that was never declared anywhere in scope — always throws, never silent, regardless of where in a file it happens |
+| catch-block masking | A single `catch` block can swallow both expected failures (e.g. a `401` wrong password) and real code bugs (e.g. `ReferenceError`) under one generic log line — always read what's actually inside the caught `error`, don't assume |
+| `localStorage.setItem(key, value)` | Both arguments are strings; `key` is the arbitrary label you choose, not a variable reference — `getItem` must later ask for that exact same string back |
+| atomic commit | A commit whose changes all serve one coherent, describable purpose — keeps `git log`/`git blame` meaningful later; bundling unrelated changes together buries the smaller ones from future search |
+| `chore:` / `docs:` commit prefixes | Conventional-commit prefixes alongside `feat:`/`fix:` — `chore:` for maintenance/cleanup work, `docs:` for documentation-only changes, neither a feature nor a bug fix |
 
 ### Quick reference: frontend route access (Lesson 39)
 
@@ -490,6 +973,14 @@ The correct placement: **inside `<BrowserRouter>`, but as a sibling *outside* `<
 | `/admin/scholarships/:id/edit` | admin token |
 
 ---
+
+*Part 3 updated: 2026-07-06 (Lessons 50–52 added: `useNavigate` and the SPA navigation model — the kitchen metaphor for code-downloaded-once vs. data-fetched-per-request, why `navigate()` genuinely changes the URL via the History API but triggers zero network activity on its own, the Vercel-rewrite-rule wrinkle flagged for Day 14, and the `useNavigate`-must-come-from-`react-router-dom` import bug; plus the `localStorage.setItem(token, ...)` bare-identifier bug and the `ReferenceError` it threw, why a `catch` block can make a real bug look identical to an expected failure, and confirming the fix by inspecting Local Storage directly; plus a commit-granularity lesson on splitting bundled feature/cleanup/docs changes into atomic `feat:`/`chore:`/`docs:` commits.)*
+
+*Part 3 updated: 2026-07-06 (Lessons 48–49 added: building the real `Register.jsx` form — the controlled-input pattern scaled across multiple fields, why JSX must actually be returned to render, why a submit handler must live inside its component via closures, the `htmlFor`/`id` copy-paste bug, and how a combined `||` guard's static error message can mislead about which field actually failed; plus the `Response`-body-read-twice bug and its stream-based root cause, and evaluating register-vs-auto-login as a genuine, deliberate design decision rather than a default.)*
+
+*Part 3 updated: 2026-07-06 (Lesson 47 added: React Hooks from first principles — why a plain `let` variable can't track form input because every re-render is a fresh function call with no memory between calls; what a Hook actually is and the `use...` naming convention; `useState` as a value living outside the function call with a setter that CAUSES re-renders rather than reacting to change; and `useEffect` as the tool for running side effects at a controlled moment instead of on every render.)*
+
+*Part 3 updated: 2026-07-06 (Lessons 45–46 added: building `services/api.js` for real — the `apiFetch` wrapper, why `response.ok` must be checked manually since `fetch()` doesn't throw on 4xx/5xx, the `Response` object vs. its unread body and why `.json()` matters; plus the first live frontend-to-backend test, hitting `ERR_CONNECTION_REFUSED` (backend not running) and then a CORS block (different ports = different origins), fixed with the `cors` middleware — closing the loop between React and Express for the first time.)*
 
 *Part 3 updated: 2026-07-06 (Lesson 44 added: `<Link>`-based client-side navigation — why a plain `<a href>` defeats the purpose of React Router, the precise click-to-render mechanism via the History API, what a URL path separator actually means, and why `<Link>`s belong inside `BrowserRouter` but outside `Routes` since `Routes` only ever renders one matched route and isn't a general container.)*
 
