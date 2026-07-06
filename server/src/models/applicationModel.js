@@ -3,7 +3,12 @@ const pool = require("../config/db");
 async function getApplicationsByStudent(studentId) {
   const result = await pool.query(
     `
-    SELECT * FROM applications WHERE student_id = $1`,
+    SELECT a.id, a.status AS application_status, a.notes, a.updated_at, 
+    s.title, s.organization, s.description, s.amount, s.slots, s.requirements, s.deadline, s.status AS scholarship_status
+    FROM applications AS a 
+    JOIN scholarships AS s
+    ON a.scholarship_id = s.id
+    WHERE a.student_id = $1`,
     [studentId],
   );
   return result.rows;
@@ -24,7 +29,6 @@ async function createApplication(
   return result.rows[0];
 }
 
-// TODO: Fix this part
 async function updateApplication(id, studentId, status, notes) {
   const result = await pool.query(
     `UPDATE applications SET status = $1, notes = $2 
