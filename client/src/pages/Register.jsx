@@ -1,4 +1,5 @@
-import { useState } from 'react' // Hooks
+import { useState } from 'react'; // Hooks
+import { useNavigate } from 'react-router-dom';
 import apiFetch from '../services/api';
 
 function Register(){
@@ -8,7 +9,8 @@ function Register(){
     const [name, setName] = useState("");
     const [password, setPassword] = useState("");
     const [role, setRole] = useState("student")
-    
+    const navigate = useNavigate();
+
     async function handleSubmit(e){
         e.preventDefault(); // stop the browser's default reload-on-submit
 
@@ -17,7 +19,7 @@ function Register(){
                 method: "POST",
                 body: JSON.stringify({email, name, password, role})
             });
-                console.log("Registered:", data);
+                navigate("/login");
         } catch (error) {
                 console.error("Registration failed:", error);
         }
