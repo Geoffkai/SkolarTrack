@@ -3,12 +3,15 @@ const BASE_URL = "http://localhost:3000";
 
 // A shared wrapper around fetch() - every page calls this instead of writing fetch() directly
 async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem("token");
+
   const response = await fetch(`${BASE_URL}${path}`, {
     // path gets glued onto BASE_URL (e.g. "/scholarships" -> "http://localhost:3000/scholarships")
     // ...options spreads in anything the caller passed (method, body, etc.)
     ...options,
     headers: {
       "Content-Type": "application/json", // tells the backend the body is JSON
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers, // lets a caller add extra headers later (e.g. Authorization)
     },
   });
