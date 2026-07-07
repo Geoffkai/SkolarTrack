@@ -10,9 +10,11 @@ const {
   update,
   remove,
   getApplicants,
+  getMyScholarships,
 } = require("../controllers/scholarshipController");
 
 router.get("/", getAll);
+router.get("/mine", verifyToken, requireAdmin, getMyScholarships);
 router.get("/:id/applications", verifyToken, requireAdmin, getApplicants);
 router.get("/:id", getOne);
 router.post("/", verifyToken, requireAdmin, create);

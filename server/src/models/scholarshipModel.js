@@ -1,5 +1,6 @@
 const pool = require("../config/db");
 
+// Get the applicants who applied to specific scholarship
 async function getApplicantsByScholarshipId(scholarshipId, adminId) {
   const result = await pool.query(
     `SELECT applications.id, applications.status, applications.notes, users.name, users.email 
@@ -8,6 +9,15 @@ async function getApplicantsByScholarshipId(scholarshipId, adminId) {
     JOIN scholarships ON applications.scholarship_id = scholarships.id
     WHERE scholarships.id = $1 AND scholarships.posted_by = $2`,
     [scholarshipId, adminId],
+  );
+  return result.rows;
+}
+
+// Get the scholarships posted by the specific admin
+async function getScholarshipsByAdmin(adminId) {
+  const result = await pool.query(
+    `SELECT * FROM scholarships WHERE posted_by = $1`,
+    [adminId],
   );
   return result.rows;
 }
@@ -105,4 +115,5 @@ module.exports = {
   createScholarship,
   updateScholarship,
   closeScholarship,
+  getScholarshipsByAdmin,
 };

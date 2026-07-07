@@ -5,6 +5,7 @@ const {
   updateScholarship,
   closeScholarship,
   getApplicantsByScholarshipId,
+  getScholarshipsByAdmin,
 } = require("../models/scholarshipModel");
 
 async function getAll(req, res) {
@@ -122,6 +123,7 @@ async function remove(req, res) {
   }
 }
 
+// function to get Applicants of specific scholarship
 async function getApplicants(req, res) {
   try {
     const scholarshipId = req.params.id;
@@ -138,4 +140,26 @@ async function getApplicants(req, res) {
     return res.status(500).json({ error: "something went wrong" });
   }
 }
-module.exports = { getAll, getOne, create, update, remove, getApplicants };
+
+async function getMyScholarships(req, res) {
+  try {
+    const adminId = req.user.userId;
+
+    const scholarships = await getScholarshipsByAdmin(adminId);
+
+    return res.status(200).json({ scholarships });
+  } catch (error) {
+    console.error("error getting scholarships by admin: ", error);
+    return res.status(500).json({ error: "something went wrong" });
+  }
+}
+
+module.exports = {
+  getAll,
+  getOne,
+  create,
+  update,
+  remove,
+  getApplicants,
+  getMyScholarships,
+};
