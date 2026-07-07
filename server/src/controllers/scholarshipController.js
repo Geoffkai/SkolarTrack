@@ -10,7 +10,7 @@ const {
 async function getAll(req, res) {
   try {
     const scholarships = await getAllScholarships();
-    return res.status(200).json(scholarships);
+    return res.status(200).json({ scholarships });
   } catch (error) {
     console.error("getAll error: ", error);
     return res.status(500).json({ error: "something went wrong" });
@@ -25,7 +25,7 @@ async function getOne(req, res) {
 
     return !scholarship
       ? res.status(404).json({ error: "scholarship does not exist" })
-      : res.status(200).json(scholarship);
+      : res.status(200).json({ scholarship });
   } catch (error) {
     console.error("searching error: ", error);
     return res.status(500).json({ error: "something went wrong" });
