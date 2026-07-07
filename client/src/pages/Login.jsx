@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiFetch from '../services/api';
+import { getRoleFromToken } from '../services/auth';
 
 //Login.jsx
 function Login(){
@@ -18,7 +19,14 @@ function Login(){
             });
 
             localStorage.setItem("token", data.token);
-            // navigate("/") to figure out
+            
+            const role = getRoleFromToken(data.token);
+
+            if(role === "student"){
+                navigate("/my-tracker");
+            } else if(role === "admin"){
+                navigate("/admin/dashboard");
+            }
         } catch (error) {
             console.error("Login failed:", error);
         }
