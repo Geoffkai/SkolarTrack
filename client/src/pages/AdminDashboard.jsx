@@ -76,6 +76,7 @@ function AdminDashboard() {
                 <p>Organization: {sch.organization}</p>
                 <p>Amount: {sch.amount}</p>
                 <p>Description: {sch.description}</p>
+                <p>Slots: {sch.slots}</p>
                 <p>Requirements: {sch.requirements}</p>
                 <p>Deadline: {sch.deadline}</p>
                 <p>Status: {sch.status}</p>
@@ -106,6 +107,7 @@ function AdminDashboard() {
                 <p>Organization: {sch.organization}</p>
                 <p>Amount: {sch.amount}</p>
                 <p>Description: {sch.description}</p>
+                <p>Slots: {sch.slots}</p>
                 <p>Requirements: {sch.requirements}</p>
                 <p>Deadline: {sch.deadline}</p>
                 <p>Status: {sch.status}</p>
