@@ -76,11 +76,12 @@ async function updateScholarship(
   slots,
   requirements,
   deadline,
+  status,
 ) {
   const result = await pool.query(
     `
-        UPDATE scholarships SET title=$1, organization=$2, description=$3, amount=$4, slots=$5, requirements=$6, deadline=$7 
-        WHERE id = $8
+        UPDATE scholarships SET title=$1, organization=$2, description=$3, amount=$4, slots=$5, requirements=$6, deadline=$7, status = $8
+        WHERE id = $9
         RETURNING *;
     `,
     [
@@ -91,6 +92,7 @@ async function updateScholarship(
       slots,
       requirements,
       deadline,
+      status,
       id,
     ],
   );

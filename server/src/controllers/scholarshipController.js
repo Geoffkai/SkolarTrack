@@ -82,6 +82,14 @@ async function update(req, res) {
       status,
     } = req.body;
 
+    if (!title || !organization || !deadline) {
+      return res.status(400).json({ error: "missing input" });
+    }
+
+    if (status !== "open" && status !== "closed") {
+      return res.status(400).json({ error: "invalid status" });
+    }
+
     const scholarship = await getScholarshipById(scholarshipId);
 
     if (!scholarship) {
@@ -97,6 +105,7 @@ async function update(req, res) {
       slots,
       requirements,
       deadline,
+      status,
     );
 
     return res.status(200).json({ result });
