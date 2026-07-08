@@ -5,7 +5,7 @@ function MyTracker() {
   const [applications, setApplication] = useState([]);
 
   useEffect(() => {
-    apiFetch("/applications")
+    await apiFetch("/applications")
       .then((data) => setApplication(data.applications))
       .catch((error) => console.error("Failed to load applications:", error));
   }, []);

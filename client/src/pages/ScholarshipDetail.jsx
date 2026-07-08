@@ -7,7 +7,7 @@ function ScholarshipDetail() {
   const { id } = useParams();
 
   useEffect(() => {
-    apiFetch(`/scholarships/${id}`)
+    await apiFetch(`/scholarships/${id}`)
       .then((data) => setScholarshipDetail(data.scholarship))
       .catch((error) =>
         console.error("Failed to get the data of scholarship: ", error),

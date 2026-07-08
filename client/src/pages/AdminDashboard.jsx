@@ -7,7 +7,7 @@ function AdminDashboard() {
   const [scholarships, setScholarship] = useState([]);
 
   useEffect(() => {
-    apiFetch("/scholarships/mine")
+    await apiFetch("/scholarships/mine")
       .then((data) => setScholarship(data.scholarships))
       .catch((error) => console.error("Failed to load scholarships: ", error));
   }, []);
