@@ -9,6 +9,7 @@ function Register() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("student");
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   async function handleSubmit(e) {
@@ -20,14 +21,16 @@ function Register() {
         body: JSON.stringify({ email, name, password, role }),
       });
       navigate("/login");
-    } catch (error) {
-      console.error("Registration failed:", error);
+    } catch (err) {
+      console.error("Registration failed:", err);
+      setError("Something went wrong. Please try again.");
     }
   }
 
   return (
     // onSubmit blocks the browser's default full-page-reload-on-submit behavior.
     <form onSubmit={handleSubmit}>
+      {error && <p style={{ color: "red" }}>{error}</p>}
       <label htmlFor="email">Email</label>
       <input
         id="email"
