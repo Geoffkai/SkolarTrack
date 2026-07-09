@@ -6,7 +6,7 @@ function Scholarships() {
   const [scholarships, setScholarship] = useState([]);
 
   useEffect(() => {
-    await apiFetch("/scholarships")
+    apiFetch("/scholarships")
       .then((data) => setScholarship(data.scholarships))
       .catch((error) => console.error("Failed to load scholarships: ", error));
   }, []);
