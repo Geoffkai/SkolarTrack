@@ -1,15 +1,42 @@
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import apiFetch from "../services/api";
 import { Link } from "react-router-dom";
 
 function Scholarships() {
   const [scholarships, setScholarship] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
+  function fetchScholarship() {
+    setIsLoading(true);
+    setError(null);
     apiFetch("/scholarships")
       .then((data) => setScholarship(data.scholarships))
-      .catch((error) => console.error("Failed to load scholarships: ", error));
+      .catch((error) => {
+        console.error("Failed to load scholarships: ", error);
+        setError(error);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }
+
+  useEffect(() => {
+    fetchScholarship();
   }, []);
+
+  if (isLoading) {
+    return <p>Loading...</p>;
+  }
+
+  if (error) {
+    return (
+      <div>
+        <p>{error.message}</p>
+        <button onClick={fetchScholarship}>Retry</button>
+      </div>
+    );
+  }
 
   return (
     <div>
