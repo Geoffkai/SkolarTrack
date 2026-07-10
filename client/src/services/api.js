@@ -19,7 +19,9 @@ async function apiFetch(path, options = {}) {
   const data = await response.json();
   // fetch() does NOT throw on a 401/404/500 — it only throws on real network failure.
   if (!response.ok) {
-    throw new Error(data.error || `Request failed ${response.status}`);
+    const err = new Error(data.error || `Request failed ${response.status}`);
+    err.status = response.status;
+    throw err;
   }
 
   // response is a Response OBJECT

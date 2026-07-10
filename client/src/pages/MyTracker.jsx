@@ -1,15 +1,55 @@
 import { useEffect, useState } from "react";
 import apiFetch from "../services/api";
+import { useNavigate } from "react-router-dom";
 
 function MyTracker() {
   const [applications, setApplication] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
-  useEffect(() => {
+  function fetchApplications() {
+    setIsLoading(true);
+    setError(null); //reset from any previous failed attempt, or a successful
     apiFetch("/applications")
       .then((data) => setApplication(data.applications))
-      .catch((error) => console.error("Failed to load applications:", error));
+      .catch((error) => {
+        console.error("Failed to load applications:", error);
+
+        // A 401 means the token is missing/expired, not a generic server
+        // problem. Retrying with the same bad token would just 401 again,
+        // so send the user to re-auth instead of showing an error+Retry UI.
+        if (error.status === 401) {
+          navigate("/login");
+          return;
+        }
+
+        // Runs on every outcome, including the 401/navigate case above —
+        // that's harmless here since the component is already unmounting.
+        setError(error);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }
+
+  useEffect(() => {
+    fetchApplications();
   }, []);
 
+  if (isLoading) {
+    return <p>Loading...</p>;
+  }
+
+  if (error) {
+    // 401s redirect above before ever setting this state.
+    return (
+      <div>
+        <p>{error.message}</p>
+        <button onClick={fetchApplications}>Retry</button>
+      </div>
+    );
+  }
   return (
     <div>
       <h1>My Tracker</h1>
