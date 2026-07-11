@@ -7,6 +7,7 @@ function EditScholarship() {
   const [isLoading, setIsLoading] = useState(true);
   const { id } = useParams();
   const navigate = useNavigate();
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     apiFetch(`/scholarships/${id}`)
@@ -31,6 +32,7 @@ function EditScholarship() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    setError(null);
 
     try {
       await apiFetch(`/scholarships/${id}`, {
@@ -40,12 +42,14 @@ function EditScholarship() {
       navigate("/admin/dashboard");
     } catch (err) {
       console.error("Registration failed:", err);
+      setError(err);
     }
   }
 
   return (
     <div>
       <h1>Edit Scholarship Page</h1>
+      {error && <p>{error.message}</p>}
       <form onSubmit={handleSubmit}>
         <label htmlFor="title">Enter Title</label>
         <input

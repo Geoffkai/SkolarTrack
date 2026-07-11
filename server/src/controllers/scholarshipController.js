@@ -81,8 +81,10 @@ async function update(req, res) {
       deadline,
       status,
     } = req.body;
+    const trimmedTitle = title?.trim();
+    const trimmedOrganization = organization?.trim();
 
-    if (!title || !organization || !deadline) {
+    if (!trimmedTitle || !trimmedOrganization || !deadline) {
       return res.status(400).json({ error: "missing input" });
     }
 
@@ -98,8 +100,8 @@ async function update(req, res) {
 
     const result = await updateScholarship(
       scholarshipId,
-      title,
-      organization,
+      trimmedTitle,
+      trimmedOrganization,
       description,
       amount,
       slots,
