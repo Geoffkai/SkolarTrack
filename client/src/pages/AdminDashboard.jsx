@@ -5,12 +5,37 @@ import { Link } from "react-router-dom";
 
 function AdminDashboard() {
   const [scholarships, setScholarship] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
-  useEffect(() => {
+  function fetchScholarship() {
+    setIsLoading(true);
+    setError(null);
     apiFetch("/scholarships/mine")
       .then((data) => setScholarship(data.scholarships))
-      .catch((error) => console.error("Failed to load scholarships: ", error));
+      .catch((error) => console.error("Failed to load scholarships: ", error))
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }
+
+  useEffect(() => {
+    fetchScholarship();
   }, []);
+
+  if (isLoading) {
+    return <p>Loading...</p>;
+  }
+
+  if (error) {
+    return (
+      <div>
+        <p>{error.message}</p>
+        <button onClick={fetchScholarship}>Retry</button>
+      </div>
+    );
+  }
 
   const activeScholarships = scholarships.filter(
     (sch) => sch.status === "open",
@@ -20,39 +45,46 @@ function AdminDashboard() {
   );
 
   async function handleClose(scholarshipId) {
+    setActionError(null);
     try {
-      await apiFetch(`/scholarships/${scholarshipId}`, { method: "DELETE" });
+      await apiFetch(`/scholarships/${scholarshipId}`, {
+        method: "DELETE",
+      });
 
-      const updatedScholarship = scholarships.map((sch) =>
-        sch.id === scholarshipId ? { ...sch, status: "closed" } : sch,
-      );
-
-      setScholarship(updatedScholarship);
+      setScholarship((currentScholarship) => {
+        return currentScholarship.map((sch) =>
+          sch.id === scholarshipId ? { ...sch, status: "closed" } : sch,
+        );
+      });
     } catch (error) {
       console.error("Failed to close scholarship: ", error);
+      setActionError(error);
     }
   }
 
   async function handleReopen(sch) {
+    setActionError(null);
     try {
       await apiFetch(`/scholarships/${sch.id}`, {
         method: "PUT",
         body: JSON.stringify({ ...sch, status: "open" }),
       });
 
-      const updatedScholarship = scholarships.map((s) =>
-        s.id === sch.id ? { ...s, status: "open" } : s,
-      );
-
-      setScholarship(updatedScholarship);
+      setScholarship((currentScholarship) => {
+        return currentScholarship.map((s) =>
+          s.id === sch.id ? { ...s, status: "open" } : s,
+        );
+      });
     } catch (error) {
       console.error("Failed to reopen scholarship: ", error);
+      setActionError(error);
     }
   }
 
   return (
     <div>
       <h1>Admin Dashboard</h1>
+      {actionError && <p>{actionError.message}</p>}
       <Link to="/admin/scholarships/new">Add New Scholarship</Link>
       <section>
         <h2>Active Scholarships</h2>
