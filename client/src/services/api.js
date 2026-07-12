@@ -1,5 +1,7 @@
 // Backend is hosted on Render — update this if the Render URL ever changes
-const BASE_URL = "https://skolartrack.onrender.com";
+const BASE_URL = import.meta.env.DEV
+  ? "http://localhost:3000"
+  : "https://skolartrack.onrender.com";
 
 // A shared wrapper around fetch() - every page calls this instead of writing fetch() directly
 async function apiFetch(path, options = {}) {
