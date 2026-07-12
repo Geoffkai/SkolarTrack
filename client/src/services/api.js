@@ -1,5 +1,5 @@
-// The one place this changes when deploying - swap this for the Railway URL on deployment
-const BASE_URL = "http://localhost:3000";
+// Backend is hosted on Render — update this if the Render URL ever changes
+const BASE_URL = "https://skolartrack.onrender.com";
 
 // A shared wrapper around fetch() - every page calls this instead of writing fetch() directly
 async function apiFetch(path, options = {}) {
