@@ -8,15 +8,12 @@ import Register from "./pages/Register";
 import ScholarshipDetail from "./pages/ScholarshipDetail";
 import Scholarships from "./pages/Scholarships";
 import ProtectedRoute from "./components/ProtectedRoute";
+import Nav from "./components/Nav";
 
 function App() {
   return (
     <BrowserRouter>
-      <nav>
-        <Link to="/scholarships">Browse Scholarships</Link>
-        <Link to="/login">Login</Link>
-        <Link to="/register">Register</Link>
-      </nav>
+      <Nav />
       <Routes>
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
