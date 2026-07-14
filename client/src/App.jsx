@@ -7,6 +7,7 @@ import NewScholarship from "./pages/NewScholarship";
 import Register from "./pages/Register";
 import ScholarshipDetail from "./pages/ScholarshipDetail";
 import Scholarships from "./pages/Scholarships";
+import PublicBrowse from "./pages/PublicBrowse";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Nav from "./components/Nav";
 
@@ -17,7 +18,12 @@ function App() {
       <Routes>
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/scholarships" element={<Scholarships />} />
+        <Route
+          path="/scholarships"
+          element={
+            localStorage.getItem("token") ? <Scholarships /> : <PublicBrowse />
+          }
+        />
         <Route path="/scholarships/:id" element={<ScholarshipDetail />} />
         <Route
           path="/my-tracker"
