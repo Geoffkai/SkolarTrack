@@ -3,6 +3,9 @@ import { useState } from "react";
 
 function Nav() {
   const [isOpen, setIsOpen] = useState(false);
+  const token = localStorage.getItem("token");
+
+  if (token) return null;
 
   const linkClass = ({ isActive }) =>
     isActive ? "border-b-2 border-primary font-semibold" : "text-muted";
