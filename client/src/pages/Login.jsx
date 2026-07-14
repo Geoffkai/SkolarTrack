@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import apiFetch from "../services/api";
 import { getRoleFromToken } from "../services/auth";
+import { useAuth } from "../context/AuthContext";
 
 //Login.jsx
 function Login() {
@@ -9,6 +10,7 @@ function Login() {
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
   const [error, setError] = useState(null);
+  const { login } = useAuth();
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -20,7 +22,7 @@ function Login() {
         body: JSON.stringify({ email, password }),
       });
 
-      localStorage.setItem("token", data.token);
+      login(data.token); // updates React state + localStorage in one place
 
       const role = getRoleFromToken(data.token);
 

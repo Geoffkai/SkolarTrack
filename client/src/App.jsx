@@ -10,19 +10,23 @@ import Scholarships from "./pages/Scholarships";
 import PublicBrowse from "./pages/PublicBrowse";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Nav from "./components/Nav";
+import Sidebar from "./components/Sidebar";
+import { useAuth } from "./context/AuthContext";
 
 function App() {
+  const { token } = useAuth();
   return (
     <BrowserRouter>
-      <Nav />
-      <Routes>
+      <div className="flex min-h-screen">
+        <Sidebar />
+        <div className="flex-1 min-w-0">
+          <Nav />
+          <Routes>
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
         <Route
           path="/scholarships"
-          element={
-            localStorage.getItem("token") ? <Scholarships /> : <PublicBrowse />
-          }
+          element={token ? <Scholarships /> : <PublicBrowse />}
         />
         <Route path="/scholarships/:id" element={<ScholarshipDetail />} />
         <Route
@@ -57,7 +61,9 @@ function App() {
             </ProtectedRoute>
           }
         />
-      </Routes>
+          </Routes>
+        </div>
+      </div>
     </BrowserRouter>
   );
 }

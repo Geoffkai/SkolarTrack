@@ -1,9 +1,10 @@
 import { NavLink } from "react-router-dom";
 import { useState } from "react";
+import { useAuth } from "../context/AuthContext";
 
 function Nav() {
   const [isOpen, setIsOpen] = useState(false);
-  const token = localStorage.getItem("token");
+  const { token } = useAuth();
 
   if (token) return null;
 
@@ -11,7 +12,7 @@ function Nav() {
     isActive ? "border-b-2 border-primary font-semibold" : "text-muted";
 
   return (
-    <nav className="bg-white border-b border-border">
+    <nav className="bg-white border-b border-border sticky">
       {/* Top row - this div IS the flex container */}
       <div className="flex items-center justify-between px-4 py-3">
         {/* Left: hambuger (mobile only) + logo */}
