@@ -121,7 +121,7 @@ function Login() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="mt-2 bg-primary text-white font-semibold py-3 rounded-lg hover:brightness-95 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:brightness-100"
+            className="mt-2 bg-primary text-white font-semibold py-3 rounded-lg hover:brightness-90 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:brightness-100"
           >
             {isSubmitting ? "Logging in..." : "Log In"}
           </button>
