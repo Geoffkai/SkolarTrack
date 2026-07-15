@@ -76,51 +76,53 @@ function Scholarships() {
   const chipOn = "bg-primary text-white";
 
   return (
-    <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-8 bg-surface">
-      {/* Header: title + search */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <h1 className="font-display font-bold text-2xl md:text-3xl text-ink">
-          Scholarships
-        </h1>
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search scholarships..."
-          className="w-full md:w-64 bg-white border border-border rounded-lg px-4 py-2.5 text-sm font-body text-ink placeholder:text-muted shadow-sm focus:outline-none focus:border-primary"
-        />
-      </div>
-
-      {/* Filter chips */}
-      <div className="flex gap-2 mt-4 overflow-x-auto pb-1">
-        <button
-          onClick={() => setOpenOnly((v) => !v)}
-          className={`${chipBase} ${openOnly ? chipOn : chipOff} whitespace-nowrap`}
-        >
-          Open only
-        </button>
-        <button
-          onClick={() => setSoonestFirst((v) => !v)}
-          className={`${chipBase} ${soonestFirst ? chipOn : chipOff} whitespace-nowrap`}
-        >
-          Deadline {soonestFirst ? "↑" : "↕"}
-        </button>
-      </div>
-
-      {visible.length === 0 ? (
-        <p className="text-muted font-body mt-8">
-          No scholarships match your filters.
-        </p>
-      ) : (
-        <div className="mt-5">
-          <ScholarshipList scholarships={visible} />
-          <p className="text-center text-xs font-semibold text-muted mt-6 pt-4 border-t border-border">
-            {visible.length} {openOnly ? "open " : ""}
-            scholarship{visible.length === 1 ? "" : "s"}
-            {openOnly ? " match your profile" : ""}
-          </p>
+    <div className="bg-background min-h-screen">
+      <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-8">
+        {/* Header: title + search */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <h1 className="font-display font-bold text-2xl md:text-3xl text-ink">
+            Scholarships
+          </h1>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search scholarships..."
+            className="w-full md:w-64 bg-white border border-border rounded-lg px-4 py-2.5 text-sm font-body text-ink placeholder:text-muted shadow-sm focus:outline-none focus:border-primary"
+          />
         </div>
-      )}
+
+        {/* Filter chips */}
+        <div className="flex gap-2 mt-4 overflow-x-auto pb-1">
+          <button
+            onClick={() => setOpenOnly((v) => !v)}
+            className={`${chipBase} ${openOnly ? chipOn : chipOff} whitespace-nowrap`}
+          >
+            Open only
+          </button>
+          <button
+            onClick={() => setSoonestFirst((v) => !v)}
+            className={`${chipBase} ${soonestFirst ? chipOn : chipOff} whitespace-nowrap`}
+          >
+            Deadline {soonestFirst ? "↑" : "↕"}
+          </button>
+        </div>
+
+        {visible.length === 0 ? (
+          <p className="text-muted font-body mt-8">
+            No scholarships match your filters.
+          </p>
+        ) : (
+          <div className="mt-5">
+            <ScholarshipList scholarships={visible} />
+            <p className="text-center text-xs font-semibold text-muted mt-6 pt-4 border-t border-border">
+              {visible.length} {openOnly ? "open " : ""}
+              scholarship{visible.length === 1 ? "" : "s"}
+              {openOnly ? " match your profile" : ""}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
