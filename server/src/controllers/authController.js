@@ -4,11 +4,11 @@ const { findUserByEmail, createUser } = require("../models/userModel"); // the t
 
 async function register(req, res) {
   try {
-    // 1. pull the fields out of the request body
-    const { email, password, role, name, course, school } = req.body;
+    // 1. pull the fields out of the request body, role is intentionally NOT read from the client
+    const { email, password, name, course, school } = req.body;
 
     // 2. basic guard
-    if (!email || !password || !role) {
+    if (!email || !password) {
       return res
         .status(400)
         .json({ error: "email, password, role are required" });
@@ -19,6 +19,8 @@ async function register(req, res) {
     if (existing) {
       return res.status(409).json({ error: "email already in use" });
     }
+
+    const role = "student";
 
     // 4. hash the password
     const passwordHash = await bcrypt.hash(password, 10); // 10 standard cost factor
