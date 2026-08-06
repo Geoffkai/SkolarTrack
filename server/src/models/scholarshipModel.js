@@ -4,8 +4,8 @@ const pool = require("../config/db");
 async function getApplicantsByScholarshipId(scholarshipId, adminId) {
   const result = await pool.query(
     `SELECT applications.id, applications.status, applications.notes, users.name, users.email 
-    FROM applications 
-    JOIN users ON applications.student_id = users.id 
+    FROM applications
+    JOIN users ON applications.student_id = users.id
     JOIN scholarships ON applications.scholarship_id = scholarships.id
     WHERE scholarships.id = $1 AND scholarships.posted_by = $2`,
     [scholarshipId, adminId],
@@ -13,10 +13,16 @@ async function getApplicantsByScholarshipId(scholarshipId, adminId) {
   return result.rows;
 }
 
-// Get the scholarships posted by the specific admin
+// Get the scholarships posted by the specific admin, with a count of applicants each.
+// LEFT JOIN so scholarships with zero applicants still appear (count = 0).
 async function getScholarshipsByAdmin(adminId) {
   const result = await pool.query(
-    `SELECT * FROM scholarships WHERE posted_by = $1`,
+    `SELECT s.*, COUNT(a.id)::int AS applicant_count
+    FROM scholarships s
+    LEFT JOIN applications a ON a.scholarship_id = s.id
+    WHERE s.posted_by = $1
+    GROUP BY s.id
+    ORDER BY s.created_at DESC`,
     [adminId],
   );
   return result.rows;
