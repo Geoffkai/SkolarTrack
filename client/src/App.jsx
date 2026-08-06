@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
 import EditScholarship from "./pages/EditScholarship";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -13,9 +13,11 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Nav from "./components/Nav";
 import Sidebar from "./components/Sidebar";
 import { useAuth } from "./context/AuthContext";
+import Home from "./components/Home";
 
 function App() {
   const { token } = useAuth();
+
   return (
     <BrowserRouter>
       <div className="flex min-h-screen">
@@ -23,7 +25,7 @@ function App() {
         <div className="flex-1 min-w-0">
           <Nav />
           <Routes>
-            <Route path="/" element={<PublicBrowse />} />
+            <Route path="/" element={<Home />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
             <Route
