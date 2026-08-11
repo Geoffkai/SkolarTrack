@@ -2,6 +2,18 @@ import { useEffect, useState } from "react";
 import apiFetch from "../services/api";
 import { useNavigate } from "react-router-dom";
 
+const COLUMNS = [
+  {
+    key: "applied",
+    label: "APPLIED",
+    header: "text-muted",
+    accent: "border-l-primary",
+  },
+  { key: "interested", label: "INTERESTED", header: "", accent: "" },
+  { key: "interview", label: "", header: "", accent: "" },
+  { key: "result", label: "", header: "", accent: "" },
+];
+
 function MyTracker() {
   const [applications, setApplication] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,27 +63,49 @@ function MyTracker() {
     );
   }
   return (
-    <div>
-      <h1>My Tracker</h1>
-      {applications.length === 0 ? (
-        <p>No applications yet - browse scholarships to get started.</p>
-      ) : (
-        <ul>
-          {applications.map((app) => (
-            <li key={app.id}>
-              <h3>{app.title}</h3>
-              <p>{app.organization}</p>
-              <p>Status: {app.application_status}</p>
-              <p>Description: {app.description}</p>
-              <p>Deadline: {app.deadline}</p>
-              <p>Requirements: {app.requirements}</p>
-              <p>Amount: {app.amount}</p>
-              <p>Slots: {app.slots}</p>
-              <p>Notes: {app.notes}</p>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className="bg-background min-h-screen">
+      <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-8">
+        <h1 className="font-display font-bold text-2xl md:text-3xl text-ink">
+          My Tracker
+        </h1>
+
+        {applications.length === 0 ? (
+          <p className="text-muted mt-8">
+            No applications yet - browse scholarships to get started.
+          </p>
+        ) : (
+          <div className="mt-6 flex gap-4">
+            {COLUMNS.map((col) => {
+              const items = applications.filter(
+                (a) => a.application_status === col.key,
+              );
+
+              return (
+                <div key={col.key} className="flex-1 flex flex-col gap-2.5">
+                  <div className={`font-bold text-[11px] ${col.header}`}>
+                    <h2>{col.label}</h2>
+                  </div>
+                </div>
+              );
+            })}
+            <ul>
+              {applications.map((app) => (
+                <li key={app.id}>
+                  <h3>{app.title}</h3>
+                  <p>{app.organization}</p>
+                  <p>Status: {app.application_status}</p>
+                  <p>Description: {app.description}</p>
+                  <p>Deadline: {app.deadline}</p>
+                  <p>Requirements: {app.requirements}</p>
+                  <p>Amount: {app.amount}</p>
+                  <p>Slots: {app.slots}</p>
+                  <p>Notes: {app.notes}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
