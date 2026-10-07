@@ -20,3 +20,22 @@
 body {
   font-family: var(--font-body);
 }
+
+/* In the base layer so a utility class (e.g. focus:outline-none on inputs, which show
+   focus with their border instead) can still override it. */
+@layer base {
+  /* :focus-visible matches keyboard focus but not mouse clicks — someone tabbing
+     through the page can always see where they are. */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  /* Respect the OS "reduce motion" setting. */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+}
