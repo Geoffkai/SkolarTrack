@@ -1,123 +1,83 @@
-import { useEffect, useState } from "react";
 import apiFetch from "../services/api";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useApi } from "../hooks/useApi";
+import { useAuth } from "../context/useAuth";
+import ScholarshipForm from "../components/ScholarshipForm";
+import { ErrorState, Loading } from "../components/PageState";
+import { secondaryButton } from "../components/styles";
 
 function EditScholarship() {
-  const [formData, setFormData] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
   const { id } = useParams();
   const navigate = useNavigate();
-  const [error, setError] = useState(null);
+  const { userId } = useAuth();
+  const { data, error, isLoading, retry } = useApi(`/scholarships/${id}`);
 
-  useEffect(() => {
-    apiFetch(`/scholarships/${id}`)
-      .then((data) => setFormData({ ...data.scholarship }))
-      .catch((err) =>
-        console.error("Failed to get the details of the scholarship: ", err),
-      )
-      .finally(() => {
-        setIsLoading(false);
-      });
-  }, []);
+  async function handleUpdate(payload) {
+    await apiFetch(`/scholarships/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    navigate("/admin/dashboard");
+  }
+
+  const backToDashboard = (
+    <Link to="/admin/dashboard" className={secondaryButton}>
+      Back to dashboard
+    </Link>
+  );
 
   if (isLoading) {
-    return <p>Loading...</p>;
+    return <Loading label="Loading listing…" />;
   }
 
-  function handleChange(e) {
-    const { name, value } = e.target;
-
-    setFormData((prevFormData) => ({ ...prevFormData, [name]: value }));
+  if (error) {
+    const isMissing = error.status === 404 || error.status === 400;
+    return (
+      <ErrorState
+        message={isMissing ? "This listing doesn't exist." : error.message}
+        onRetry={isMissing ? undefined : retry}
+      >
+        {backToDashboard}
+      </ErrorState>
+    );
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError(null);
-
-    try {
-      await apiFetch(`/scholarships/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(formData),
-      });
-      navigate("/admin/dashboard");
-    } catch (err) {
-      console.error("Registration failed:", err);
-      setError(err);
-    }
+  // The server refuses the save anyway (a PUT on someone else's listing returns 404);
+  // checking here just avoids showing a form that could never be submitted.
+  if (data.scholarship.posted_by !== userId) {
+    return (
+      <ErrorState message="You can only edit listings you posted.">
+        {backToDashboard}
+      </ErrorState>
+    );
   }
 
   return (
-    <div>
-      <h1>Edit Scholarship Page</h1>
-      {error && <p>{error.message}</p>}
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="title">Enter Title</label>
-        <input
-          id="title"
-          name="title"
-          value={formData.title}
-          type="text"
-          onChange={handleChange}
-          required
-        />
+    <div className="bg-background min-h-screen">
+      <div className="max-w-2xl mx-auto px-4 md:px-8 py-6 md:py-8">
+        <Link
+          to="/admin/dashboard"
+          className="text-xs font-semibold text-primary hover:underline"
+        >
+          ← Back to dashboard
+        </Link>
+        <h1 className="font-display font-bold text-2xl md:text-3xl text-ink mt-3">
+          Edit listing
+        </h1>
 
-        <label htmlFor="organization">Enter Organization</label>
-        <input
-          id="organization"
-          name="organization"
-          value={formData.organization}
-          type="text"
-          onChange={handleChange}
-          required
-        />
-
-        <label htmlFor="description">Enter Description</label>
-        <input
-          id="description"
-          name="description"
-          value={formData.description}
-          type="text"
-          onChange={handleChange}
-        />
-
-        <label htmlFor="amount">Enter Amount</label>
-        <input
-          id="amount"
-          name="amount"
-          value={formData.amount}
-          type="number"
-          onChange={handleChange}
-        />
-
-        <label htmlFor="slots">Enter Slots</label>
-        <input
-          id="slots"
-          name="slots"
-          value={formData.slots}
-          type="number"
-          onChange={handleChange}
-        />
-
-        <label htmlFor="requirements">Enter Requirements</label>
-        <input
-          id="requirements"
-          name="requirements"
-          value={formData.requirements}
-          type="text"
-          onChange={handleChange}
-        />
-
-        <label htmlFor="deadline">Enter Deadline</label>
-        <input
-          id="deadline"
-          name="deadline"
-          value={formData.deadline}
-          type="date"
-          onChange={handleChange}
-          required
-        />
-        <button type="submit">Edit Scholarship</button>
-      </form>
+        <div className="bg-white rounded-2xl border border-border shadow-sm p-5 md:p-6 mt-6">
+          {/* key={id}: a different listing gets a brand-new form instead of reusing the
+              previous one's typed-in state */}
+          <ScholarshipForm
+            key={id}
+            initialValues={data.scholarship}
+            showStatus
+            submitLabel="Save changes"
+            submittingLabel="Saving…"
+            onSubmit={handleUpdate}
+          />
+        </div>
+      </div>
     </div>
   );
 }

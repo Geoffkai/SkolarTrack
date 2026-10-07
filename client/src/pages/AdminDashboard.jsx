@@ -1,99 +1,84 @@
 //AdminDashboard.jsx
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import apiFetch from "../services/api";
 import { Link } from "react-router-dom";
-
-function daysLeft(deadline) {
-  return Math.ceil((new Date(deadline) - new Date()) / (1000 * 60 * 60 * 24));
-}
-
-function deadlineLabel(sch) {
-  if (sch.status === "closed") return "Closed";
-  const d = daysLeft(sch.deadline);
-  if (d < 0) return "Closed";
-  if (d === 0) return "Due today";
-  return `${d} days left`;
-}
+import { useApi } from "../hooks/useApi";
+import { ErrorState, Loading } from "../components/PageState";
+import { deadlineStatus } from "../utils/dates";
 
 const PREVIEW_COUNT = 5;
 
 function AdminDashboard() {
-  const [scholarships, setScholarships] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data, error, isLoading, retry, setData } =
+    useApi("/scholarships/mine");
   const [actionError, setActionError] = useState(null);
   const [showAll, setShowAll] = useState(false);
+  // id of the listing whose Close/Reopen request is in flight, so its button
+  // can't be clicked a second time before the first answer comes back
+  const [pendingId, setPendingId] = useState(null);
 
-  function fetchScholarships() {
-    setIsLoading(true);
-    setError(null);
-    apiFetch("/scholarships/mine")
-      .then((data) => setScholarships(data.scholarships))
-      .catch((err) => {
-        console.error("Failed to load scholarships: ", err);
-        setError(err);
-      })
-      .finally(() => setIsLoading(false));
+  // Functional update (current => ...): two quick actions on different rows each
+  // build on the true latest list instead of a stale snapshot.
+  function setStatus(scholarshipId, status) {
+    setData((current) => ({
+      scholarships: current.scholarships.map((sch) =>
+        sch.id === scholarshipId ? { ...sch, status } : sch,
+      ),
+    }));
   }
-
-  useEffect(() => {
-    fetchScholarships();
-  }, []);
 
   async function handleClose(scholarshipId) {
     setActionError(null);
+    setPendingId(scholarshipId);
     try {
       await apiFetch(`/scholarships/${scholarshipId}`, { method: "DELETE" });
-      setScholarships((current) =>
-        current.map((sch) =>
-          sch.id === scholarshipId ? { ...sch, status: "closed" } : sch,
-        ),
-      );
+      setStatus(scholarshipId, "closed");
     } catch (err) {
       console.error("Failed to close scholarship: ", err);
       setActionError(err);
+    } finally {
+      setPendingId(null);
     }
   }
 
   async function handleReopen(sch) {
     setActionError(null);
+    setPendingId(sch.id);
     try {
+      // PUT replaces the whole listing, so every editable field is sent back as it was
+      // with only the status changed. (Listed out rather than spreading ...sch, which
+      // would also send id, posted_by and applicant_count — none of them editable.)
       await apiFetch(`/scholarships/${sch.id}`, {
         method: "PUT",
-        body: JSON.stringify({ ...sch, status: "open" }),
+        body: JSON.stringify({
+          title: sch.title,
+          organization: sch.organization,
+          description: sch.description,
+          amount: sch.amount,
+          slots: sch.slots,
+          requirements: sch.requirements,
+          deadline: sch.deadline,
+          status: "open",
+        }),
       });
-      setScholarships((current) =>
-        current.map((s) =>
-          s.id === sch.id ? { ...s, status: "open" } : s,
-        ),
-      );
+      setStatus(sch.id, "open");
     } catch (err) {
       console.error("Failed to reopen scholarship: ", err);
       setActionError(err);
+    } finally {
+      setPendingId(null);
     }
   }
 
   if (isLoading) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 md:px-8 py-8">
-        <p className="text-muted font-body">Loading…</p>
-      </div>
-    );
+    return <Loading label="Loading your listings…" />;
   }
 
   if (error) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 md:px-8 py-8">
-        <p className="text-deadline-urgent font-semibold">{error.message}</p>
-        <button
-          onClick={fetchScholarships}
-          className="mt-3 bg-primary text-white font-semibold text-sm px-4 py-2 rounded-lg cursor-pointer"
-        >
-          Retry
-        </button>
-      </div>
-    );
+    return <ErrorState message={error.message} onRetry={retry} />;
   }
+
+  const scholarships = data.scholarships;
 
   // Overview numbers, all derived from real data
   const activeCount = scholarships.filter((s) => s.status === "open").length;
@@ -130,7 +115,10 @@ function AdminDashboard() {
         </div>
 
         {actionError && (
-          <p className="text-sm font-semibold text-deadline-urgent mt-4">
+          <p
+            role="alert"
+            className="text-sm font-semibold text-deadline-urgent mt-4"
+          >
             {actionError.message}
           </p>
         )}
@@ -185,68 +173,77 @@ function AdminDashboard() {
                 <div className="text-right">ACTIONS</div>
               </div>
 
-              {visibleListings.map((sch) => (
-                <div
-                  key={sch.id}
-                  className="grid grid-cols-[1.8fr_0.8fr_0.9fr_0.8fr_1.2fr] px-5 py-4 items-center border-b border-border last:border-b-0"
-                >
-                  <div className="font-display font-bold text-sm text-ink pr-3">
-                    {sch.title}
-                  </div>
-                  <div className="text-xs font-semibold text-muted">
-                    {sch.applicant_count}
-                  </div>
+              {visibleListings.map((sch) => {
+                const deadline = deadlineStatus(sch);
+                const isPending = pendingId === sch.id;
+                return (
                   <div
-                    className={`text-xs font-semibold ${
-                      sch.status === "open" && daysLeft(sch.deadline) <= 14
-                        ? "text-deadline-urgent"
-                        : "text-muted"
-                    }`}
+                    key={sch.id}
+                    className="grid grid-cols-[1.8fr_0.8fr_0.9fr_0.8fr_1.2fr] px-5 py-4 items-center border-b border-border last:border-b-0"
                   >
-                    {deadlineLabel(sch)}
-                  </div>
-                  <div>
-                    <span
-                      className={`text-[10.5px] font-bold px-2.5 py-1 rounded-md ${
-                        sch.status === "open"
-                          ? "bg-chip text-success"
-                          : "bg-chip text-muted"
+                    <Link
+                      to={`/scholarships/${sch.id}`}
+                      className="font-display font-bold text-sm text-ink pr-3 hover:underline"
+                    >
+                      {sch.title}
+                    </Link>
+                    <div className="text-xs font-semibold text-muted">
+                      {sch.applicant_count}
+                    </div>
+                    <div
+                      className={`text-xs font-semibold ${
+                        deadline.isUrgent
+                          ? "text-deadline-urgent"
+                          : "text-muted"
                       }`}
                     >
-                      {sch.status === "open" ? "Open" : "Closed"}
-                    </span>
-                  </div>
-                  <div className="flex gap-3 justify-end text-xs font-semibold">
-                    <Link
-                      to={`/admin/scholarships/${sch.id}/applicants`}
-                      className="text-primary hover:underline"
-                    >
-                      Manage
-                    </Link>
-                    <Link
-                      to={`/admin/scholarships/${sch.id}/edit`}
-                      className="text-primary hover:underline"
-                    >
-                      Edit
-                    </Link>
-                    {sch.status === "open" ? (
-                      <button
-                        onClick={() => handleClose(sch.id)}
-                        className="text-deadline-urgent hover:underline cursor-pointer"
+                      {deadline.label}
+                    </div>
+                    <div>
+                      <span
+                        className={`text-[10.5px] font-bold px-2.5 py-1 rounded-md ${
+                          sch.status === "open"
+                            ? "bg-chip text-success"
+                            : "bg-chip text-muted"
+                        }`}
                       >
-                        Close
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleReopen(sch)}
-                        className="text-success hover:underline cursor-pointer"
+                        {sch.status === "open" ? "Open" : "Closed"}
+                      </span>
+                    </div>
+                    <div className="flex gap-3 justify-end text-xs font-semibold">
+                      <Link
+                        to={`/admin/scholarships/${sch.id}/applicants`}
+                        className="text-primary hover:underline"
                       >
-                        Reopen
-                      </button>
-                    )}
+                        Applicants
+                      </Link>
+                      <Link
+                        to={`/admin/scholarships/${sch.id}/edit`}
+                        className="text-primary hover:underline"
+                      >
+                        Edit
+                      </Link>
+                      {sch.status === "open" ? (
+                        <button
+                          onClick={() => handleClose(sch.id)}
+                          disabled={isPending}
+                          className="text-deadline-urgent hover:underline cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {isPending ? "Closing…" : "Close"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleReopen(sch)}
+                          disabled={isPending}
+                          className="text-success hover:underline cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {isPending ? "Reopening…" : "Reopen"}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
