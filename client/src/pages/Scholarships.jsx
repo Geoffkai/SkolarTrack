@@ -1,79 +1,62 @@
-import { useEffect, useMemo, useState } from "react";
-import apiFetch from "../services/api";
+import { useMemo, useState } from "react";
+import { useApi } from "../hooks/useApi";
 import ScholarshipList from "../components/ScholarshipList";
+import { ErrorState, Loading } from "../components/PageState";
+import { chipBase, chipOff, chipOn } from "../components/styles";
+import {
+  SORT_OPTIONS,
+  filterScholarships,
+  sortScholarships,
+} from "../utils/scholarships";
+
+const AMOUNT_OPTIONS = [
+  { value: 0, label: "Any amount" },
+  { value: 10000, label: "₱10,000 or more" },
+  { value: 25000, label: "₱25,000 or more" },
+  { value: 50000, label: "₱50,000 or more" },
+  { value: 100000, label: "₱100,000 or more" },
+];
+
+const selectClass =
+  "bg-white border border-border rounded-lg px-3 py-2 text-xs font-semibold text-ink shadow-sm cursor-pointer focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 function Scholarships() {
-  const [scholarships, setScholarships] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data, error, isLoading, retry } = useApi("/scholarships");
 
   const [search, setSearch] = useState("");
   const [openOnly, setOpenOnly] = useState(true);
-  const [soonestFirst, setSoonestFirst] = useState(true);
-
-  function fetchScholarships() {
-    setIsLoading(true);
-    setError(null);
-    apiFetch("/scholarships")
-      .then((data) => setScholarships(data.scholarships))
-      .catch((err) => {
-        console.error("Failed to load scholarships: ", err);
-        setError(err);
-      })
-      .finally(() => setIsLoading(false));
-  }
-
-  useEffect(() => {
-    fetchScholarships();
-  }, []);
+  const [closingSoon, setClosingSoon] = useState(false);
+  const [minAmount, setMinAmount] = useState(0);
+  const [sortBy, setSortBy] = useState("deadline");
 
   // Derive the list we actually show. useMemo remembers the result and only
   // recomputes when one of its dependencies changes.
   const visible = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    let rows = scholarships.filter((sch) => {
-      if (openOnly && sch.status !== "open") return false; // hide closed ones
-      if (!query) return true; // empty search box -> keep everything
-      return (
-        sch.title?.toLowerCase().includes(query) ||
-        sch.organization?.toLowerCase().includes(query)
-      );
+    const rows = filterScholarships(data?.scholarships ?? [], {
+      search,
+      openOnly,
+      closingSoon,
+      minAmount,
     });
-
-    if (soonestFirst) {
-      rows = [...rows].sort(
-        (a, b) => new Date(a.deadline) - new Date(b.deadline),
-      );
-    }
-    return rows;
-  }, [scholarships, search, openOnly, soonestFirst]);
+    return sortScholarships(rows, sortBy);
+  }, [data, search, openOnly, closingSoon, minAmount, sortBy]);
 
   if (isLoading) {
-    return (
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
-        <p className="text-muted font-body">Loading scholarships…</p>
-      </div>
-    );
+    return <Loading label="Loading scholarships…" />;
   }
 
   if (error) {
-    return (
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
-        <p className="text-deadline-urgent font-semibold">{error.message}</p>
-        <button
-          onClick={fetchScholarships}
-          className="mt-3 bg-primary text-white font-semibold text-sm px-4 py-2 rounded-lg cursor-pointer"
-        >
-          Retry
-        </button>
-      </div>
-    );
+    return <ErrorState message={error.message} onRetry={retry} />;
   }
 
-  const chipBase =
-    "font-semibold text-xs px-4 py-2 rounded-lg transition-colors cursor-pointer select-none";
-  const chipOff = "bg-chip text-primary hover:brightness-95";
-  const chipOn = "bg-primary text-white";
+  const hasAnyListings = data.scholarships.length > 0;
+
+  function clearFilters() {
+    setSearch("");
+    setOpenOnly(false);
+    setClosingSoon(false);
+    setMinAmount(0);
+  }
 
   return (
     <div className="bg-background min-h-screen">
@@ -87,38 +70,78 @@ function Scholarships() {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search scholarships..."
-            className="w-full md:w-64 bg-white border border-border rounded-lg px-4 py-2.5 text-sm font-body text-ink placeholder:text-muted shadow-sm focus:outline-none focus:border-primary"
+            placeholder="Search by name, organization or course"
+            aria-label="Search scholarships"
+            className="w-full md:w-80 bg-white border border-border rounded-lg px-4 py-2.5 text-sm font-body text-ink placeholder:text-muted shadow-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </div>
 
-        {/* Filter chips */}
-        <div className="flex gap-2 mt-4 overflow-x-auto pb-1">
+        {/* Filters: toggles on the left, dropdowns on the right */}
+        <div className="flex flex-wrap items-center gap-2 mt-4">
           <button
             onClick={() => setOpenOnly((v) => !v)}
-            className={`${chipBase} ${openOnly ? chipOn : chipOff} whitespace-nowrap`}
+            aria-pressed={openOnly}
+            className={`${chipBase} ${openOnly ? chipOn : chipOff}`}
           >
             Open only
           </button>
           <button
-            onClick={() => setSoonestFirst((v) => !v)}
-            className={`${chipBase} ${soonestFirst ? chipOn : chipOff} whitespace-nowrap`}
+            onClick={() => setClosingSoon((v) => !v)}
+            aria-pressed={closingSoon}
+            className={`${chipBase} ${closingSoon ? chipOn : chipOff}`}
           >
-            Deadline {soonestFirst ? "↑" : "↕"}
+            Closing in 2 weeks
           </button>
+
+          <select
+            value={minAmount}
+            onChange={(e) => setMinAmount(Number(e.target.value))}
+            aria-label="Minimum amount"
+            className={selectClass}
+          >
+            {AMOUNT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            aria-label="Sort scholarships"
+            className={selectClass}
+          >
+            {Object.entries(SORT_OPTIONS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
 
         {visible.length === 0 ? (
-          <p className="text-muted font-body mt-8">
-            No scholarships match your filters.
-          </p>
+          <div className="mt-8">
+            <p className="text-muted font-body">
+              {hasAnyListings
+                ? "No scholarships match your search and filters."
+                : "No scholarships have been posted yet. Check back soon."}
+            </p>
+            {hasAnyListings && (
+              <button
+                onClick={clearFilters}
+                className="mt-3 text-sm font-semibold text-primary hover:underline cursor-pointer"
+              >
+                Clear search and filters
+              </button>
+            )}
+          </div>
         ) : (
           <div className="mt-5">
             <ScholarshipList scholarships={visible} />
             <p className="text-center text-xs font-semibold text-muted mt-6 pt-4 border-t border-border">
-              {visible.length} {openOnly ? "open " : ""}
-              scholarship{visible.length === 1 ? "" : "s"}
-              {openOnly ? " match your profile" : ""}
+              Showing {visible.length} of {data.scholarships.length} scholarship
+              {data.scholarships.length === 1 ? "" : "s"}
             </p>
           </div>
         )}
