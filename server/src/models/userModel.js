@@ -3,8 +3,12 @@ const pool = require("../config/db"); // the ONE shared pool
 // READ - find a single user by email;
 async function findUserByEmail(email) {
   const result = await pool.query(
-    `SELECT * FROM users 
-    WHERE email = $1`, // $1 = safe placeholder (anti sql injection)
+    // LOWER() on both sides: Juan@up.edu.ph and juan@up.edu.ph are the same mailbox,
+    // so they must be the same account (also matches rows saved before emails were lowercased)
+    `SELECT * FROM users
+    WHERE LOWER(email) = LOWER($1)
+    ORDER BY id
+    LIMIT 1`, // $1 = safe placeholder (anti sql injection)
     [email],
   );
   return result.rows[0]; // the one user, it will return undefined if not found
