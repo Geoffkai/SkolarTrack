@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const verifyToken = require("../middleware/auth");
 const { requireAdmin } = require("../middleware/roles");
+const validateIdParam = require("../middleware/validateId");
 
 const {
   getAll,
@@ -12,6 +13,9 @@ const {
   getApplicants,
   getMyScholarships,
 } = require("../controllers/scholarshipController");
+
+// runs for every route below that has :id in its path
+router.param("id", validateIdParam);
 
 router.get("/", getAll);
 router.get("/mine", verifyToken, requireAdmin, getMyScholarships);

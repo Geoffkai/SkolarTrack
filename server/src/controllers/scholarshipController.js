@@ -7,6 +7,7 @@ const {
   getApplicantsByScholarshipId,
   getScholarshipsByAdmin,
 } = require("../models/scholarshipModel");
+const { validateScholarship } = require("../utils/validation");
 
 async function getAll(req, res) {
   try {
@@ -36,29 +37,22 @@ async function getOne(req, res) {
 async function create(req, res) {
   try {
     const { userId } = req.user;
-    const {
-      title,
-      organization,
-      description,
-      amount,
-      slots,
-      requirements,
-      deadline,
-    } = req.body;
 
-    if (!title || !organization || !deadline) {
-      return res.status(400).json({ error: "missing input" });
+    // cleaned copy of the body: text trimmed, blank optional fields turned into null
+    const { error, value } = validateScholarship(req.body);
+    if (error) {
+      return res.status(400).json({ error });
     }
 
     const scholarship = await createScholarship(
       userId,
-      title,
-      organization,
-      description,
-      amount,
-      slots,
-      requirements,
-      deadline,
+      value.title,
+      value.organization,
+      value.description,
+      value.amount,
+      value.slots,
+      value.requirements,
+      value.deadline,
     );
 
     return res.status(201).json({ scholarship });
@@ -71,44 +65,33 @@ async function create(req, res) {
 async function update(req, res) {
   try {
     const scholarshipId = req.params.id;
-    const {
-      title,
-      organization,
-      description,
-      amount,
-      slots,
-      requirements,
-      deadline,
-      status,
-    } = req.body;
-    const trimmedTitle = title?.trim();
-    const trimmedOrganization = organization?.trim();
+    const adminId = req.user.userId; // ownership id comes from the verified token, never trusted from req.body
 
-    if (!trimmedTitle || !trimmedOrganization || !deadline) {
-      return res.status(400).json({ error: "missing input" });
+    const { error, value } = validateScholarship(req.body, {
+      requireStatus: true,
+    });
+    if (error) {
+      return res.status(400).json({ error });
     }
 
-    if (status !== "open" && status !== "closed") {
-      return res.status(400).json({ error: "invalid status" });
-    }
-
-    const scholarship = await getScholarshipById(scholarshipId);
-
-    if (!scholarship) {
-      return res.status(404).json({ error: "no scholarship found" });
-    }
-
+    // the model only touches the row if this admin posted it
     const result = await updateScholarship(
       scholarshipId,
-      trimmedTitle,
-      trimmedOrganization,
-      description,
-      amount,
-      slots,
-      requirements,
-      deadline,
-      status,
+      adminId,
+      value.title,
+      value.organization,
+      value.description,
+      value.amount,
+      value.slots,
+      value.requirements,
+      value.deadline,
+      value.status,
     );
+
+    // it doesn't exist, or it exists but belongs to another admin — one vague 404 either way
+    if (!result) {
+      return res.status(404).json({ error: "no scholarship found" });
+    }
 
     return res.status(200).json({ result });
   } catch (error) {
@@ -120,13 +103,15 @@ async function update(req, res) {
 async function remove(req, res) {
   try {
     const scholarshipId = req.params.id;
-    const scholarship = await getScholarshipById(scholarshipId);
+    const adminId = req.user.userId;
 
-    if (!scholarship) {
+    const result = await closeScholarship(scholarshipId, adminId);
+
+    // same vague 404 as update: missing and "not yours" look identical from outside
+    if (!result) {
       return res.status(404).json({ error: "no scholarship found" });
     }
 
-    const result = await closeScholarship(scholarshipId);
     return res.status(200).json({ result });
   } catch (error) {
     console.error("error in removing: ", error);

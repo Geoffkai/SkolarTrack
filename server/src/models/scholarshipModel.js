@@ -3,11 +3,16 @@ const pool = require("../config/db");
 // Get the applicants who applied to specific scholarship
 async function getApplicantsByScholarshipId(scholarshipId, adminId) {
   const result = await pool.query(
-    `SELECT applications.id, applications.status, applications.notes, users.name, users.email 
+    // columns are listed one by one on purpose: SELECT users.* would also ship password_hash.
+    // applications.notes is left out too — those are the student's private notes to
+    // themselves, and the coordinator they're applying to has no business reading them.
+    `SELECT applications.id, applications.status, applications.updated_at,
+      users.name, users.email, users.school, users.course
     FROM applications
     JOIN users ON applications.student_id = users.id
     JOIN scholarships ON applications.scholarship_id = scholarships.id
-    WHERE scholarships.id = $1 AND scholarships.posted_by = $2`,
+    WHERE scholarships.id = $1 AND scholarships.posted_by = $2
+    ORDER BY applications.updated_at DESC`,
     [scholarshipId, adminId],
   );
   return result.rows;
@@ -29,7 +34,10 @@ async function getScholarshipsByAdmin(adminId) {
 }
 
 async function getAllScholarships() {
-  const result = await pool.query("SELECT * FROM scholarships;");
+  // without ORDER BY, Postgres may return rows in a different order on every call
+  const result = await pool.query(
+    "SELECT * FROM scholarships ORDER BY deadline ASC, id ASC;",
+  );
   return result.rows;
 }
 
@@ -73,8 +81,11 @@ async function createScholarship(
   return result.rows[0];
 }
 
+// Ownership lives in the WHERE clause: if adminId didn't post this row, zero rows match,
+// nothing is changed and undefined comes back — exactly like an id that doesn't exist.
 async function updateScholarship(
   id,
+  adminId,
   title,
   organization,
   description,
@@ -87,7 +98,7 @@ async function updateScholarship(
   const result = await pool.query(
     `
         UPDATE scholarships SET title=$1, organization=$2, description=$3, amount=$4, slots=$5, requirements=$6, deadline=$7, status = $8
-        WHERE id = $9
+        WHERE id = $9 AND posted_by = $10
         RETURNING *;
     `,
     [
@@ -100,18 +111,20 @@ async function updateScholarship(
       deadline,
       status,
       id,
+      adminId,
     ],
   );
   return result.rows[0];
 }
 
-async function closeScholarship(id) {
+// Soft delete: the row is kept and only its status changes. Same ownership rule as above.
+async function closeScholarship(id, adminId) {
   const result = await pool.query(
     `
-        UPDATE scholarships SET status = 'closed' WHERE id = $1
+        UPDATE scholarships SET status = 'closed' WHERE id = $1 AND posted_by = $2
         RETURNING *;
     `,
-    [id],
+    [id, adminId],
   );
   return result.rows[0];
 }
