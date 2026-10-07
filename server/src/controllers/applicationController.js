@@ -4,6 +4,11 @@ const {
   updateApplication,
   deleteApplication,
 } = require("../models/applicationModel");
+const { getScholarshipById } = require("../models/scholarshipModel");
+const {
+  validateNewApplication,
+  validateApplicationUpdate,
+} = require("../utils/validation");
 
 async function getAll(req, res) {
   try {
@@ -21,10 +26,23 @@ async function getAll(req, res) {
 async function create(req, res) {
   try {
     const studentId = req.user.userId;
-    const { scholarshipId, notes } = req.body;
 
-    if (!scholarshipId) {
-      return res.status(400).json({ error: "scholarship is missing" });
+    const { error, value } = validateNewApplication(req.body);
+    if (error) {
+      return res.status(400).json({ error });
+    }
+    const { scholarshipId, notes } = value;
+
+    // check the target first so the student gets a real answer (404 / 409)
+    // instead of a foreign-key error surfacing as a 500
+    const scholarship = await getScholarshipById(scholarshipId);
+    if (!scholarship) {
+      return res.status(404).json({ error: "scholarship does not exist" });
+    }
+    if (scholarship.status !== "open") {
+      return res
+        .status(409)
+        .json({ error: "this scholarship is closed and can no longer be saved" });
     }
 
     const application = await createApplication(
@@ -49,23 +67,19 @@ async function update(req, res) {
   try {
     const userId = req.user.userId; // ownership id comes from the verified token, never trusted from req.body
     const applicationId = req.params.id; // the applications primary key, from the URL (:id)
-    const { status, notes } = req.body;
-    const allowedStatuses = ["interested", "applied", "interview", "result"];
 
-    if (!status) {
-      return res.status(400).json({ error: "status is missing" });
-    }
-    if (!allowedStatuses.includes(status)) {
-      return res.status(400).json({
-        error: `status must be one of: ${allowedStatuses.join(", ")}`,
-      });
+    // full replacement, same convention as PUT /scholarships: status is required,
+    // and notes left out of the body are cleared rather than kept
+    const { error, value } = validateApplicationUpdate(req.body);
+    if (error) {
+      return res.status(400).json({ error });
     }
 
     const updatedApplication = await updateApplication(
       applicationId,
       userId,
-      status,
-      notes,
+      value.status,
+      value.notes,
     );
 
     //need to check if the application is existing and it is for the student

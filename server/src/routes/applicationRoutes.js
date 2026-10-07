@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const verifyToken = require("../middleware/auth");
 const { requireStudent } = require("../middleware/roles");
+const validateIdParam = require("../middleware/validateId");
 
 const {
   getAll,
@@ -9,6 +10,9 @@ const {
   update,
   remove,
 } = require("../controllers/applicationController");
+
+// runs for every route below that has :id in its path
+router.param("id", validateIdParam);
 
 router.get("/", verifyToken, requireStudent, getAll);
 router.post("/", verifyToken, requireStudent, create);
