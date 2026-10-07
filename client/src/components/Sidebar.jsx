@@ -1,30 +1,21 @@
-import { NavLink, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/useAuth";
+import { navLinksFor } from "./navLinks";
 
 // The signed-in left rail. Mirror of Nav: Nav hides when logged IN,
 // Sidebar hides when logged OUT — so exactly one shows at a time.
+// (On phones this rail is hidden and MobileNav does the same job.)
 function Sidebar() {
   const navigate = useNavigate();
-  const { token, role, logout } = useAuth();
+  const { token, role } = useAuth();
 
   // Not logged in? Render nothing and let the public <Nav /> take over.
   if (!token) return null;
 
-  // Only show links this role can actually reach (avoids ProtectedRoute bounces).
-  const links =
-    role === "admin"
-      ? [
-          { to: "/admin/dashboard", label: "Dashboard" },
-          { to: "/scholarships", label: "Browse" },
-        ]
-      : [
-          { to: "/scholarships", label: "Browse" },
-          { to: "/my-tracker", label: "My Tracker" },
-        ];
+  const links = navLinksFor(role);
 
   function handleLogout() {
-    logout(); // clears token in state + localStorage -> every reader re-renders
-    navigate("/scholarships"); // then move to the public page
+    navigate("/logout"); // pages/Logout.jsx clears the token, then moves to the public page
   }
 
   // NavLink hands us { isActive }; we style the pill differently when it's the current page.
@@ -34,10 +25,11 @@ function Sidebar() {
     }`;
 
   return (
-    <aside className="hidden md:flex flex-col w-56 shrink-0 min-h-screen bg-surface border-r border-border p-4 gap-6">
-      <div className="font-display font-bold text-lg text-ink px-1">
+    // sticky + h-screen: the rail stays put while a long page scrolls, so Log out is always reachable
+    <aside className="hidden md:flex flex-col w-56 shrink-0 h-screen sticky top-0 bg-surface border-r border-border p-4 gap-6">
+      <Link to="/" className="font-display font-bold text-lg text-ink px-1">
         SkolarTrack
-      </div>
+      </Link>
 
       <nav className="flex flex-col gap-1">
         {links.map((link) => (

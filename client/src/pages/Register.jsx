@@ -1,6 +1,10 @@
 import { useState } from "react"; // Hooks
-import { useNavigate, Link } from "react-router-dom";
+import { Navigate, useNavigate, Link } from "react-router-dom";
 import apiFetch from "../services/api";
+import { useAuth } from "../context/useAuth";
+import { errorText, inputClass, labelClass } from "../components/styles";
+
+const MIN_PASSWORD_LENGTH = 8; // keep in step with the server's rule
 
 function Register() {
   //Each field get its own pieces of state - React needs to "own" these
@@ -13,6 +17,12 @@ function Register() {
   const [error, setError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
+  const { token } = useAuth();
+
+  // someone already logged in has no use for a sign-up form
+  if (token) {
+    return <Navigate to="/" replace />;
+  }
 
   async function handleSubmit(e) {
     e.preventDefault(); // stop the browser's default reload-on-submit
@@ -20,6 +30,7 @@ function Register() {
     setIsSubmitting(true);
 
     try {
+      // no role in the body: the server decides it (always "student" for public sign-ups)
       await apiFetch("/auth/register", {
         method: "POST",
         body: JSON.stringify({
@@ -28,24 +39,25 @@ function Register() {
           course,
           school,
           password,
-          role: "student",
         }),
       });
-      navigate("/login");
+      // hand the email to the login page so it doesn't have to be typed twice
+      navigate("/login", { state: { registered: true, email: email.trim() } });
     } catch (err) {
       console.error("Registration failed:", err);
-      setError("Something went wrong. Please try again.");
-    } finally {
+      // the server's message says which field is the problem — show it, not a generic line
+      setError(
+        err.status === 409
+          ? "That email already has an account. Log in instead."
+          : err.message,
+      );
       setIsSubmitting(false);
     }
   }
 
-  const inputClass =
-    "w-full px-4 py-3 rounded-lg border border-border bg-background text-sm " +
-    "text-ink placeholder:text-muted focus:outline-none focus:border-primary";
   return (
     // full screen centering wrapper
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-8">
       {/* card */}
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-8">
         {/* brand header */}
@@ -67,15 +79,15 @@ function Register() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           {/* full Name */}
           <div>
-            <label
-              htmlFor="name"
-              className="block text-xs font-bold text-ink mb-1.5"
-            >
+            <label htmlFor="name" className={labelClass}>
               Full name
             </label>
             <input
               id="name"
               type="text"
+              autoComplete="name"
+              required
+              maxLength={200}
               value={name}
               className={inputClass}
               placeholder="Your name"
@@ -85,15 +97,14 @@ function Register() {
 
           {/* email */}
           <div>
-            <label
-              htmlFor="email"
-              className="block text-xs font-bold text-ink mb-1.5"
-            >
+            <label htmlFor="email" className={labelClass}>
               School email
             </label>
             <input
               id="email"
               type="email"
+              autoComplete="email"
+              required
               value={email}
               placeholder="you@up.edu.ph"
               className={inputClass}
@@ -104,15 +115,13 @@ function Register() {
           {/* course + school */}
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1">
-              <label
-                htmlFor="course"
-                className="block text-xs font-bold text-ink mb-1.5"
-              >
+              <label htmlFor="course" className={labelClass}>
                 Course
               </label>
               <input
                 id="course"
                 type="text"
+                maxLength={200}
                 value={course}
                 placeholder="BS Comp Sci"
                 className={inputClass}
@@ -120,15 +129,14 @@ function Register() {
               />
             </div>
             <div className="flex-1">
-              <label
-                htmlFor="school"
-                className="block text-xs font-bold text-ink mb-1.5"
-              >
+              <label htmlFor="school" className={labelClass}>
                 School
               </label>
               <input
                 id="school"
                 type="text"
+                autoComplete="organization"
+                maxLength={200}
                 value={school}
                 placeholder="UP Diliman"
                 className={inputClass}
@@ -138,24 +146,29 @@ function Register() {
           </div>
 
           <div>
-            <label
-              htmlFor="password"
-              className="block text-xs font-bold text-ink mb-1.5"
-            >
+            <label htmlFor="password" className={labelClass}>
               Password
             </label>
             <input
               id="password"
               type="password"
+              autoComplete="new-password"
+              required
+              minLength={MIN_PASSWORD_LENGTH}
+              maxLength={72}
               value={password}
               placeholder="••••••••"
               className={inputClass}
+              aria-describedby="password-hint"
               onChange={(e) => setPassword(e.target.value)}
             />
+            <p id="password-hint" className="text-xs text-muted mt-1.5">
+              At least {MIN_PASSWORD_LENGTH} characters.
+            </p>
           </div>
 
           {error && (
-            <p className="text-sm font-semibold text-deadline-urgent">
+            <p role="alert" className={errorText}>
               {error}
             </p>
           )}
