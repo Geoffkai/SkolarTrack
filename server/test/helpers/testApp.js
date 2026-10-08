@@ -120,6 +120,35 @@ async function createTestApp(envOverrides) {
     return rows[0];
   }
 
+  // A scholarship the student typed in themselves: a tracker row with no listing behind it.
+  async function createPersonalApplication(studentId, overrides = {}) {
+    const entry = {
+      title: "SM Foundation College Scholarship",
+      organization: "SM Foundation",
+      amount: 15000,
+      deadline: "2099-06-30",
+      status: "interested",
+      notes: null,
+      ...overrides,
+    };
+    const { rows } = await db.query(
+      `INSERT INTO applications
+         (student_id, personal_title, personal_organization, personal_amount, personal_deadline, status, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [
+        studentId,
+        entry.title,
+        entry.organization,
+        entry.amount,
+        entry.deadline,
+        entry.status,
+        entry.notes,
+      ],
+      { parsers },
+    );
+    return rows[0];
+  }
+
   // Runs raw SQL so a test can assert on what actually landed in the table.
   async function query(text, params) {
     return (await db.query(text, params, { parsers })).rows;
@@ -134,6 +163,7 @@ async function createTestApp(envOverrides) {
     createUser,
     createScholarship,
     createApplication,
+    createPersonalApplication,
     query,
     bearer,
   };

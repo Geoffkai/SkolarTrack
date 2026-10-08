@@ -26,9 +26,23 @@ CREATE TABLE scholarships(
 CREATE TABLE applications(
   id SERIAL PRIMARY KEY,
   student_id INTEGER NOT NULL REFERENCES users(id),
-  scholarship_id INTEGER NOT NULL REFERENCES scholarships(id),
+  -- NULL for a "personal" entry: a scholarship the student added themselves
+  scholarship_id INTEGER REFERENCES scholarships(id),
   status VARCHAR NOT NULL CHECK (status IN ('interested', 'applied', 'interview', 'result')) DEFAULT 'interested',
   notes TEXT,
   updated_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE (student_id, scholarship_id)
+  personal_title VARCHAR,
+  personal_organization VARCHAR,
+  personal_amount NUMERIC,
+  personal_deadline DATE,
+  UNIQUE (student_id, scholarship_id),
+  -- a row tracks either a listing or the student's own scholarship, never a mix of both
+  CONSTRAINT applications_listing_or_personal CHECK (
+    (scholarship_id IS NOT NULL
+      AND personal_title IS NULL AND personal_organization IS NULL
+      AND personal_amount IS NULL AND personal_deadline IS NULL)
+    OR
+    (scholarship_id IS NULL
+      AND personal_title IS NOT NULL AND personal_organization IS NOT NULL)
+  )
 );

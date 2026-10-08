@@ -106,6 +106,10 @@ function requiredDate(input, field) {
     : { error: `${field} is not a real calendar date` };
 }
 
+function optionalDate(input, field) {
+  return isBlank(input[field]) ? { value: null } : requiredDate(input, field);
+}
+
 // Runs each field check in order and stops at the first problem.
 function collect(checks) {
   const value = {};
@@ -211,6 +215,22 @@ function validateApplicationUpdate(body) {
   });
 }
 
+// A scholarship the student adds to their own tracker. It asks for less than a listing:
+// students often hear about one before its amount or dates are announced.
+function validatePersonalEntry(body, { withNotes = false } = {}) {
+  const input = asObject(body);
+  const checks = {
+    title: requiredText(input, "title", LIMITS.shortText),
+    organization: requiredText(input, "organization", LIMITS.shortText),
+    amount: optionalAmount(input),
+    deadline: optionalDate(input, "deadline"),
+  };
+  if (withNotes) {
+    checks.notes = optionalText(input, "notes", LIMITS.notes);
+  }
+  return collect(checks);
+}
+
 module.exports = {
   parseId,
   validateRegistration,
@@ -218,4 +238,5 @@ module.exports = {
   validateScholarship,
   validateNewApplication,
   validateApplicationUpdate,
+  validatePersonalEntry,
 };
