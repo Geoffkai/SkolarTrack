@@ -59,6 +59,7 @@ Interested  →  Applied  →  Interview  →  Result
 - 🔍 **Browse & search** all open scholarships (search also matches descriptions and requirements, so a course name finds its scholarships)
 - 🧮 **Filter & sort** by deadline (closing soon), minimum amount, and open/closed status
 - 🔖 **Save** scholarships to a personal tracker
+- ➕ **Add your own** scholarship found somewhere else and track it the same way (only you can see it)
 - 📊 **Track application status** through a 4-stage pipeline
 - 🗑️ **Remove** scholarships no longer being pursued
 
@@ -164,15 +165,20 @@ scholarships (
 applications (
   id             SERIAL PRIMARY KEY,
   student_id     INTEGER NOT NULL REFERENCES users(id),
-  scholarship_id INTEGER NOT NULL REFERENCES scholarships(id),
+  scholarship_id INTEGER REFERENCES scholarships(id),  -- NULL for a scholarship the student added themselves
   status         VARCHAR CHECK (status IN ('interested','applied','interview','result')),
   notes          TEXT,
   updated_at     TIMESTAMP NOT NULL DEFAULT NOW(),
-  UNIQUE (student_id, scholarship_id)
+  personal_title        VARCHAR,   -- these four are only filled in when scholarship_id is NULL
+  personal_organization VARCHAR,
+  personal_amount       NUMERIC,
+  personal_deadline     DATE,
+  UNIQUE (student_id, scholarship_id),
+  CHECK (/* a saved listing OR a personal entry, never a mix of both */)
 );
 ```
 
-> The canonical schema lives in [`server/db/schema.sql`](server/db/schema.sql) and is committed to the repo — a lightweight form of migrations that can rebuild the database from scratch.
+> The canonical schema lives in [`server/db/schema.sql`](server/db/schema.sql) and is committed to the repo; it can rebuild the database from scratch. A database created from an earlier version is brought up to date by running the files in [`server/db/migrations/`](server/db/migrations) in date order.
 
 ---
 
@@ -295,6 +301,8 @@ Both are rate limited per IP address.
 |---|---|---|---|
 | `GET` | `/applications` | **Student** | Get the logged-in student's applications |
 | `POST` | `/applications` | **Student** | Save / apply to a scholarship |
+| `POST` | `/applications/personal` | **Student** | Add a scholarship of your own to the tracker (up to 50) |
+| `PUT` | `/applications/personal/:id` | **Student (owner)** | Replace the details of a scholarship you added yourself |
 | `PUT` | `/applications/:id` | **Student (owner)** | Update application status and notes |
 | `DELETE` | `/applications/:id` | **Student (owner)** | Remove from tracker |
 
@@ -365,7 +373,8 @@ skolartrack/
 │   ├── index.js                # Entry point — the only app.listen()
 │   ├── .env.example            # Template for required secrets
 │   ├── db/
-│   │   └── schema.sql          # CREATE TABLE statements (committed)
+│   │   ├── schema.sql          # CREATE TABLE statements (committed)
+│   │   └── migrations/         # ALTER statements that bring an older database up to schema.sql
 │   ├── scripts/
 │   │   └── createAdmin.js      # The only way to create an admin account
 │   ├── test/                   # API tests (node --test + supertest + PGlite)
@@ -412,6 +421,8 @@ skolartrack/
 | `/scholarships` | Everyone | Browse listings (open ones only when logged out) |
 | `/scholarships/:id` | Everyone | Full details; students save it to their tracker from here |
 | `/my-tracker` | Student | Personal application pipeline |
+| `/my-tracker/new` | Student | Add a scholarship of your own to the tracker |
+| `/my-tracker/:id/edit` | Student | Edit the details of a scholarship you added yourself |
 | `/admin/dashboard` | Admin | Manage posted scholarships |
 | `/admin/scholarships/new` | Admin | Create a new listing |
 | `/admin/scholarships/:id/edit` | Admin | Edit an existing listing |
@@ -424,7 +435,7 @@ skolartrack/
 - **Passwords** are hashed with **bcrypt** (salted, deliberately slow) — plain-text passwords are never stored. New passwords must be 8–72 characters.
 - **JWTs** are signed with a server-only secret, pinned to HS256, and expire after `JWT_EXPIRES_IN`.
 - **RBAC middleware** rejects student tokens on admin routes with `401 Unauthorized`. Nobody can self-register as an admin: the role is never read from a request.
-- **Ownership** is checked in the SQL itself. One admin cannot edit, close, or read the applicants of another admin's listing; one student cannot touch another's tracker. A student's private notes are never sent to admins.
+- **Ownership** is checked in the SQL itself. One admin cannot edit, close, or read the applicants of another admin's listing; one student cannot touch another's tracker. A student's private notes are never sent to admins, and neither are the scholarships a student adds to their own tracker.
 - **Input validation** runs on every write: types, lengths, real calendar dates, non-negative amounts. Bad input gets a `400`, not a database error.
 - **SQL injection** is prevented via parameterized queries (`$1` placeholders) in every model.
 - **Brute-force protection** — login and sign-up are rate limited per IP, and a failed login takes the same time whether or not the email exists.
