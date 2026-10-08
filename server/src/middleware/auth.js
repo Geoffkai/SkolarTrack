@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const config = require("../config/env");
 
 function verifyToken(req, res, next) {
   // 1. read the Authorization header
@@ -13,8 +14,16 @@ function verifyToken(req, res, next) {
   const token = authHeader.split(" ")[1];
 
   try {
-    //4. verify it
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    //4. verify it — and only accept the one algorithm login signs with, so a token
+    // can't pick its own (weaker) algorithm in its header
+    const payload = jwt.verify(token, config.jwtSecret, {
+      algorithms: ["HS256"],
+    });
+
+    // a genuine signature on a payload that isn't shaped like ours is still not ours
+    if (!Number.isInteger(payload.userId) || typeof payload.role !== "string") {
+      return res.status(401).json({ error: "invalid or expired token" });
+    }
 
     // 5. genuine - remember who they are
     req.user = payload;

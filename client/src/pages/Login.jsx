@@ -1,17 +1,26 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { Navigate, Link, useLocation } from "react-router-dom";
 import apiFetch from "../services/api";
-import { getRoleFromToken } from "../services/auth";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
+import { errorText, inputClass, labelClass } from "../components/styles";
 
 //Login.jsx
 function Login() {
-  const [email, setEmail] = useState("");
+  // location.state is filled in by whoever sent the visitor here:
+  // ProtectedRoute ({ from }) or the Register page ({ registered, email })
+  const { state } = useLocation();
+  const [email, setEmail] = useState(state?.email ?? "");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const navigate = useNavigate();
   const [error, setError] = useState(null);
-  const { login } = useAuth();
+  const { token, role, login, sessionExpired } = useAuth();
+
+  // Already logged in — or login() below just ran and re-rendered us with a token.
+  // Either way there's nothing to do here: go back to where they were headed, or home.
+  if (token) {
+    const home = role === "admin" ? "/admin/dashboard" : "/my-tracker";
+    return <Navigate to={state?.from ?? home} replace />;
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -25,36 +34,20 @@ function Login() {
       });
 
       login(data.token); // updates React state + localStorage in one place
-
-      const role = getRoleFromToken(data.token);
-
-      if (role === "student") {
-        navigate("/my-tracker");
-      } else if (role === "admin") {
-        navigate("/admin/dashboard");
-      }
     } catch (error) {
       console.error("Login failed:", error);
-      if (error.status === 400) {
-        setError("Email and password are required");
-      } else if (error.status === 401) {
-        setError("Wrong email or password");
-      } else {
-        setError("Something went wrong on our end. Please try again.");
-      }
-    } finally {
+      // 401 gets our own wording; everything else (too many attempts, no connection,
+      // server trouble) already arrives from apiFetch as a sentence a person can read
+      setError(
+        error.status === 401 ? "Wrong email or password." : error.message,
+      );
       setIsSubmitting(false);
     }
   }
 
-  // Share input styling
-  const inputClass =
-    "w-full px-4 py-3 rounded-lg border border-border bg-background text-sm " +
-    "text-ink placeholder:text-muted focus:outline-none focus:border-primary";
-
   return (
     /* full screen centering wrapper*/
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-8">
       {/* card */}
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-8">
         {/* brand header */}
@@ -63,7 +56,7 @@ function Login() {
             SkolarTrack
           </div>
           <p className="text-xs text-muted mt-1">
-            Scholarship for Filipino students, all in one place
+            Scholarships for Filipino students, all in one place
           </p>
         </div>
 
@@ -72,19 +65,29 @@ function Login() {
           Welcome back
         </h1>
 
+        {/* why you're looking at this form, when there's a reason beyond "you clicked Log In" */}
+        {sessionExpired && (
+          <p role="status" className="text-sm font-semibold text-amount mb-4">
+            Your session expired. Log in again to pick up where you left off.
+          </p>
+        )}
+        {state?.registered && !sessionExpired && (
+          <p role="status" className="text-sm font-semibold text-success mb-4">
+            Account created. Log in to start tracking scholarships.
+          </p>
+        )}
+
         {/* form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div>
-            <label
-              htmlFor="email"
-              className="block text-xs font-bold text-ink mb-1.5"
-            >
+            <label htmlFor="email" className={labelClass}>
               Email
             </label>
             <input
               id="email"
               type="email"
               autoComplete="email"
+              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@up.edu.ph"
@@ -93,16 +96,14 @@ function Login() {
           </div>
 
           <div>
-            <label
-              htmlFor="password"
-              className="block text-xs font-bold text-ink mb-1.5"
-            >
+            <label htmlFor="password" className={labelClass}>
               Password
             </label>
             <input
               id="password"
               type="password"
               autoComplete="current-password"
+              required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -112,7 +113,7 @@ function Login() {
 
           {/* styled error */}
           {error && (
-            <p className="text-sm font-semibold text-deadline-urgent">
+            <p role="alert" className={errorText}>
               {error}
             </p>
           )}

@@ -49,16 +49,17 @@ The application status pipeline:
 Interested  →  Applied  →  Interview  →  Result
 ```
 
-> **Status:** 🚧 In active development. This README documents the intended production architecture; backend and frontend are being built feature-first (schema → server → auth → API → UI → deploy).
+> **Status:** ✅ v1 feature-complete. Every route and page in the spec is built and covered by an automated test suite. Hosting: API on Render, web on Vercel, database on Neon.
 
 ---
 
 ## ✨ Features
 
 ### For Students
-- 🔍 **Browse & search** all open scholarships
-- 🧮 **Filter** by deadline, amount, course, or open/closed status
+- 🔍 **Browse & search** all open scholarships (search also matches descriptions and requirements, so a course name finds its scholarships)
+- 🧮 **Filter & sort** by deadline (closing soon), minimum amount, and open/closed status
 - 🔖 **Save** scholarships to a personal tracker
+- ➕ **Add your own** scholarship found somewhere else and track it the same way (only you can see it)
 - 📊 **Track application status** through a 4-stage pipeline
 - 🗑️ **Remove** scholarships no longer being pursued
 
@@ -71,7 +72,8 @@ Interested  →  Applied  →  Interview  →  Result
 ### Platform
 - 🔐 **JWT authentication** with bcrypt-hashed passwords
 - 🛡️ **Role-based access control** — student tokens hitting admin routes get a `401`
-- 🧯 **Graceful error handling** — clear messages, empty states, no silent failures
+- 🔒 **Ownership checks** — an admin can only edit, close, or view applicants for listings they posted
+- 🧯 **Graceful error handling** — clear messages, empty states, no silent failures; an expired session sends you back to log in
 - 📱 **Responsive web UI**
 
 ---
@@ -85,7 +87,8 @@ Interested  →  Applied  →  Interview  →  Result
 | **Backend** | Node.js + Express | Pairs naturally with React; widely demanded |
 | **Database** | PostgreSQL 17 (Neon.tech) | Hosted, serverless, free tier — no local install |
 | **Auth** | JWT + bcrypt | Industry-standard authentication |
-| **Deploy** | Railway (API) + Vercel (web) | Beginner-friendly free tiers |
+| **Deploy** | Render (API) + Vercel (web) | Genuinely free tiers, no credit card |
+| **Testing** | Node's built-in test runner, supertest, PGlite | Real SQL against an in-memory Postgres — no test database to host |
 | **Tooling** | Git + GitHub, Thunder Client, ESLint | Standard professional workflow |
 
 ---
@@ -101,10 +104,11 @@ Request
 routes/          maps HTTP verb + path  →  delegates to a controller
   │
   ▼
-middleware/      auth (verify JWT) · roles (check req.user.role)
+middleware/      auth (verify JWT) · roles (check req.user.role) · rate limit · id check
   │
   ▼
 controllers/     request/response logic only — no SQL
+  │                (input checks live in utils/validation.js: pure functions, no req/res)
   │
   ▼
 models/          all SQL queries live here — nothing else
@@ -117,6 +121,8 @@ PostgreSQL (Neon)
 
 - `routes/` only maps paths → `controllers/` handle req/res → `models/` run SQL. **Never write SQL in a controller.**
 - A single `pg` connection **Pool** is created once in `config/db.js` and imported everywhere.
+- Environment variables are read and validated in **one** place, `config/env.js`. A missing variable stops the server at boot with a clear message.
+- **Ownership is enforced in SQL** (`WHERE id = $1 AND posted_by = $2`), never by trusting an id from the request body.
 - `server/index.js` is the **only** file that calls `app.listen()`. `app.js` builds the app and exports it.
 - All frontend API calls go through `client/src/services/api.js` — **never** inline `fetch()` in components.
 - Scholarships are **soft-deleted** (`status = 'closed'`) — never `DELETE FROM`.
@@ -159,15 +165,20 @@ scholarships (
 applications (
   id             SERIAL PRIMARY KEY,
   student_id     INTEGER NOT NULL REFERENCES users(id),
-  scholarship_id INTEGER NOT NULL REFERENCES scholarships(id),
+  scholarship_id INTEGER REFERENCES scholarships(id),  -- NULL for a scholarship the student added themselves
   status         VARCHAR CHECK (status IN ('interested','applied','interview','result')),
   notes          TEXT,
   updated_at     TIMESTAMP NOT NULL DEFAULT NOW(),
-  UNIQUE (student_id, scholarship_id)
+  personal_title        VARCHAR,   -- these four are only filled in when scholarship_id is NULL
+  personal_organization VARCHAR,
+  personal_amount       NUMERIC,
+  personal_deadline     DATE,
+  UNIQUE (student_id, scholarship_id),
+  CHECK (/* a saved listing OR a personal entry, never a mix of both */)
 );
 ```
 
-> The canonical schema lives in [`server/db/schema.sql`](server/db/schema.sql) and is committed to the repo — a lightweight form of migrations that can rebuild the database from scratch.
+> The canonical schema lives in [`server/db/schema.sql`](server/db/schema.sql) and is committed to the repo; it can rebuild the database from scratch. A database created from an earlier version is brought up to date by running the files in [`server/db/migrations/`](server/db/migrations) in date order.
 
 ---
 
@@ -175,7 +186,7 @@ applications (
 
 ### Prerequisites
 
-- **Node.js 24 LTS** — verify with `node -v`
+- **Node.js 22 or newer** (24 LTS recommended) — verify with `node -v`
 - A free **[Neon.tech](https://neon.tech)** PostgreSQL database (PostgreSQL 17)
 - **Git**
 
@@ -206,12 +217,32 @@ curl http://localhost:3000/health
 # → { "status": "ok", "db": "connected" }
 ```
 
-### 4. Configure & run the frontend
+### 4. Create an admin account
+
+Public sign-up always creates a **student**. Admin accounts are created from the command line, by someone who holds the database credentials:
+
+```bash
+cd server
+npm run create-admin -- coordinator@school.edu.ph "a-strong-password" "Coordinator Name"
+```
+
+### 5. Configure & run the frontend
 
 ```bash
 cd client
 npm install
 npm run dev                 # vite → http://localhost:5173
+```
+
+The frontend talks to `http://localhost:3000` in development and to the hosted API in a production build. To point it somewhere else, copy `client/.env.example` to `client/.env.local` and set `VITE_API_URL`.
+
+### 6. Run the checks
+
+```bash
+cd server && npm test       # API tests against an in-memory Postgres — never touches Neon
+cd client && npm test       # unit tests for the date, filter, format and token helpers
+cd client && npm run lint
+cd client && npm run build
 ```
 
 ---
@@ -224,8 +255,13 @@ Create `server/.env` from `server/.env.example`. **Never commit `.env`** — it 
 |---|---|---|
 | `DATABASE_URL` | Neon PostgreSQL connection string | `postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require` |
 | `JWT_SECRET` | Secret for signing JWTs — generate a strong random string | `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` |
+| `CORS_ORIGINS` | Comma-separated frontend origins allowed to call the API | `http://localhost:5173,https://skolar-track.vercel.app` |
 | `PORT` | Port the API listens on | `3000` |
 | `JWT_EXPIRES_IN` | How long a login token stays valid | `7d` |
+| `AUTH_RATE_LIMIT_MAX` | *(optional)* Failed logins / sign-ups allowed per IP every 15 minutes | `30` |
+| `TRUST_PROXY` | *(optional)* Number of reverse proxies in front of the server | `1` |
+
+`DATABASE_URL`, `JWT_SECRET` and `CORS_ORIGINS` are required — the server refuses to start without them. In production `JWT_SECRET` must be at least 32 characters.
 
 > 💡 Generate a `JWT_SECRET` with:
 > ```bash
@@ -242,8 +278,10 @@ Base URL (local): `http://localhost:3000`
 
 | Method | Endpoint | Access | Description |
 |---|---|---|---|
-| `POST` | `/auth/register` | Public | Create a user, return a JWT |
+| `POST` | `/auth/register` | Public | Create a student account, return the user (log in next to get a token) |
 | `POST` | `/auth/login` | Public | Verify credentials, return a JWT |
+
+Both are rate limited per IP address.
 
 ### Scholarships
 
@@ -251,9 +289,11 @@ Base URL (local): `http://localhost:3000`
 |---|---|---|---|
 | `GET` | `/scholarships` | Public | List all scholarships |
 | `GET` | `/scholarships/:id` | Public | Get one scholarship |
+| `GET` | `/scholarships/mine` | **Admin** | The caller's own listings, each with an applicant count |
+| `GET` | `/scholarships/:id/applications` | **Admin (owner)** | Students who saved this listing |
 | `POST` | `/scholarships` | **Admin** | Create a scholarship |
-| `PUT` | `/scholarships/:id` | **Admin** | Update a scholarship |
-| `DELETE` | `/scholarships/:id` | **Admin** | Soft-delete (`status = 'closed'`) |
+| `PUT` | `/scholarships/:id` | **Admin (owner)** | Replace a scholarship (full body, including `status`) |
+| `DELETE` | `/scholarships/:id` | **Admin (owner)** | Soft-delete (`status = 'closed'`) |
 
 ### Applications
 
@@ -261,8 +301,29 @@ Base URL (local): `http://localhost:3000`
 |---|---|---|---|
 | `GET` | `/applications` | **Student** | Get the logged-in student's applications |
 | `POST` | `/applications` | **Student** | Save / apply to a scholarship |
-| `PUT` | `/applications/:id` | **Student** | Update application status |
-| `DELETE` | `/applications/:id` | **Student** | Remove from tracker |
+| `POST` | `/applications/personal` | **Student** | Add a scholarship of your own to the tracker (up to 50) |
+| `PUT` | `/applications/personal/:id` | **Student (owner)** | Replace the details of a scholarship you added yourself |
+| `PUT` | `/applications/:id` | **Student (owner)** | Update application status and notes |
+| `DELETE` | `/applications/:id` | **Student (owner)** | Remove from tracker |
+
+### Other
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/health` | Public | `{ "status": "ok", "db": "connected" }` when the API can reach the database |
+
+### Errors
+
+Every error is JSON in one shape — `{ "error": "what went wrong" }` — so the frontend can always show it.
+
+| Status | Meaning |
+|---|---|
+| `400` | The request failed validation (the message names the field), or an id isn't a number |
+| `401` | No token, an invalid or expired token, or a token for the wrong role |
+| `404` | It doesn't exist — **or** it exists but isn't yours (deliberately indistinguishable) |
+| `409` | Conflict: email already registered, scholarship already saved, or scholarship closed |
+| `413` | Request body larger than 50 KB |
+| `429` | Too many login or sign-up attempts — try again in a few minutes |
 
 ### Authentication header
 
@@ -279,18 +340,28 @@ curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "student@up.edu.ph",
-    "password": "secret123",
-    "role": "student",
-    "name": "Juan Dela Cruz"
+    "password": "at-least-8-characters",
+    "name": "Juan Dela Cruz",
+    "course": "BS Computer Science",
+    "school": "UP Diliman"
   }'
 ```
 
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": { "id": 1, "email": "student@up.edu.ph", "role": "student" }
+  "user": {
+    "id": 1,
+    "email": "student@up.edu.ph",
+    "role": "student",
+    "name": "Juan Dela Cruz",
+    "course": "BS Computer Science",
+    "school": "UP Diliman",
+    "created_at": "2026-10-08T03:00:00.000Z"
+  }
 }
 ```
+
+A `role` sent in the body is ignored — the server always assigns `student`. Registering does not log you in; call `POST /auth/login` with the same credentials to receive `{ "token": "..." }`.
 
 ---
 
@@ -302,26 +373,43 @@ skolartrack/
 │   ├── index.js                # Entry point — the only app.listen()
 │   ├── .env.example            # Template for required secrets
 │   ├── db/
-│   │   └── schema.sql          # CREATE TABLE statements (committed)
+│   │   ├── schema.sql          # CREATE TABLE statements (committed)
+│   │   └── migrations/         # ALTER statements that bring an older database up to schema.sql
+│   ├── scripts/
+│   │   └── createAdmin.js      # The only way to create an admin account
+│   ├── test/                   # API tests (node --test + supertest + PGlite)
 │   └── src/
 │       ├── app.js              # Express setup: middleware + route mounting
 │       ├── config/
+│       │   ├── env.js          # Reads + validates environment variables, once
 │       │   └── db.js           # Single pg Pool, exported
 │       ├── routes/             # HTTP verb + path → controller
 │       ├── controllers/        # Request/response logic
 │       ├── models/             # All SQL queries
+│       ├── utils/
+│       │   └── validation.js   # Pure input checks shared by the controllers
 │       └── middleware/
 │           ├── auth.js         # Verifies JWT
-│           └── roles.js        # Checks req.user.role (RBAC)
+│           ├── roles.js        # Checks req.user.role (RBAC)
+│           ├── rateLimit.js    # Slows down password guessing and mass sign-ups
+│           ├── validateId.js   # Rejects non-numeric :id before it reaches SQL
+│           └── errorHandler.js # JSON 404 + last-resort error handler
 │
 └── client/                     # React + Vite frontend
+    ├── vercel.json             # SPA rewrite + security headers for Vercel
+    ├── test/                   # Unit tests for the pure helpers
     └── src/
         ├── main.jsx            # ReactDOM entry point
         ├── App.jsx             # React Router — all routes
         ├── pages/              # One file per route
         ├── components/         # Reusable UI pieces
+        ├── context/            # AuthProvider + useAuth (who is logged in)
+        ├── hooks/
+        │   └── useApi.js       # Load-on-mount with loading / error / retry
+        ├── utils/              # Dates, peso formatting, filters, pipeline stages
         └── services/
-            └── api.js          # ALL API calls live here
+            ├── api.js          # ALL API calls live here
+            └── auth.js         # Token storage + decoding (for display only)
 ```
 
 ### Pages
@@ -330,29 +418,40 @@ skolartrack/
 |---|---|---|
 | `/register` | Everyone | Create an account |
 | `/login` | Everyone | Authenticate, receive JWT |
-| `/scholarships` | Student | Browse all open listings |
-| `/scholarships/:id` | Student | View full scholarship details |
+| `/scholarships` | Everyone | Browse listings (open ones only when logged out) |
+| `/scholarships/:id` | Everyone | Full details; students save it to their tracker from here |
 | `/my-tracker` | Student | Personal application pipeline |
+| `/my-tracker/new` | Student | Add a scholarship of your own to the tracker |
+| `/my-tracker/:id/edit` | Student | Edit the details of a scholarship you added yourself |
 | `/admin/dashboard` | Admin | Manage posted scholarships |
 | `/admin/scholarships/new` | Admin | Create a new listing |
 | `/admin/scholarships/:id/edit` | Admin | Edit an existing listing |
+| `/admin/scholarships/:id/applicants` | Admin | Students who saved a listing, filterable by stage |
 
 ---
 
 ## 🛡 Security
 
-- **Passwords** are hashed with **bcrypt** (salted, deliberately slow) — plain-text passwords are never stored.
-- **JWTs** are signed with a server-only secret and expire after `JWT_EXPIRES_IN`.
-- **RBAC middleware** rejects student tokens on admin routes with `401 Unauthorized`.
+- **Passwords** are hashed with **bcrypt** (salted, deliberately slow) — plain-text passwords are never stored. New passwords must be 8–72 characters.
+- **JWTs** are signed with a server-only secret, pinned to HS256, and expire after `JWT_EXPIRES_IN`.
+- **RBAC middleware** rejects student tokens on admin routes with `401 Unauthorized`. Nobody can self-register as an admin: the role is never read from a request.
+- **Ownership** is checked in the SQL itself. One admin cannot edit, close, or read the applicants of another admin's listing; one student cannot touch another's tracker. A student's private notes are never sent to admins, and neither are the scholarships a student adds to their own tracker.
+- **Input validation** runs on every write: types, lengths, real calendar dates, non-negative amounts. Bad input gets a `400`, not a database error.
 - **SQL injection** is prevented via parameterized queries (`$1` placeholders) in every model.
+- **Brute-force protection** — login and sign-up are rate limited per IP, and a failed login takes the same time whether or not the email exists.
+- **Security headers** on the API (helmet) and on the frontend (`client/vercel.json`: a Content-Security-Policy, no framing, no MIME sniffing).
+- **CORS** is an explicit allowlist read from `CORS_ORIGINS` — never `*`.
+- **Errors never leak internals**: a `500` returns a generic message; the detail goes to the server log.
 - **Secrets** live only in `.env`, which is git-ignored. A leaked secret is treated as burned and rotated immediately.
-- **TLS** is enforced on the database connection (`sslmode=require`).
+- **TLS** is enforced on the database connection.
+
+Known trade-off: the JWT lives in `localStorage` (as the spec asks), which any script running on the page could read. The Content-Security-Policy is the mitigation — it blocks scripts from anywhere but this site. Moving to an `httpOnly` cookie is the stronger fix and is on the roadmap.
 
 ---
 
 ## 🗺 Roadmap
 
-**v1 (current)** — Full-stack CRUD, JWT auth, RBAC, deployed on Railway + Vercel.
+**v1 (current)** — Full-stack CRUD, JWT auth, RBAC, deployed on Render + Vercel.
 
 Planned for later versions (explicitly **out of scope for v1**):
 
@@ -360,6 +459,8 @@ Planned for later versions (explicitly **out of scope for v1**):
 - 📎 File uploads for application documents
 - ⚡ Real-time updates (WebSockets)
 - 📱 Native mobile app
+- 🍪 Session in an `httpOnly` cookie instead of `localStorage`
+- ✉️ Email verification and password reset
 
 ---
 

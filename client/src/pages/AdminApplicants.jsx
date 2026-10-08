@@ -1,57 +1,32 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import apiFetch from "../services/api";
-
-// Your real application statuses (schema-enforced). The design's "Awarded/Rejected"
-// don't exist yet, so we filter by these.
-const STAGES = ["interested", "applied", "interview", "result"];
-
-// A label + colored chip per status, using the theme tokens.
-const STAGE_STYLE = {
-  interested: "bg-chip text-muted",
-  applied: "bg-chip text-primary",
-  interview: "bg-chip text-amount",
-  result: "bg-chip text-success",
-};
+import { useApi } from "../hooks/useApi";
+import { useAuth } from "../context/useAuth";
+import { ErrorState, Loading } from "../components/PageState";
+import { secondaryButton } from "../components/styles";
+import { STAGES, stageFor } from "../utils/stages";
 
 function AdminApplicants() {
   const { id } = useParams();
-  const [scholarship, setScholarship] = useState(null);
-  const [applicants, setApplicants] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { userId } = useAuth();
+
+  // Two requests, started together: the scholarship (for its title) and its applicants.
+  const scholarshipRequest = useApi(`/scholarships/${id}`);
+  const applicantsRequest = useApi(`/scholarships/${id}/applications`);
 
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("all");
 
-  function load() {
-    setIsLoading(true);
-    setError(null);
-    // Fetch the scholarship (for its title) and its applicants together.
-    Promise.all([
-      apiFetch(`/scholarships/${id}`),
-      apiFetch(`/scholarships/${id}/applications`),
-    ])
-      .then(([schData, appData]) => {
-        setScholarship(schData.scholarship);
-        setApplicants(appData.applications);
-      })
-      .catch((err) => {
-        console.error("Failed to load applicants: ", err);
-        setError(err);
-      })
-      .finally(() => setIsLoading(false));
-  }
-
-  useEffect(() => {
-    load();
-  }, [id]);
+  const applicants = useMemo(
+    () => applicantsRequest.data?.applications ?? [],
+    [applicantsRequest.data],
+  );
 
   // Count per stage (for the chip labels), recomputed only when applicants change.
   const counts = useMemo(() => {
     const c = { all: applicants.length };
     for (const s of STAGES) {
-      c[s] = applicants.filter((a) => a.status === s).length;
+      c[s.key] = applicants.filter((a) => a.status === s.key).length;
     }
     return c;
   }, [applicants]);
@@ -64,30 +39,49 @@ function AdminApplicants() {
       return (
         a.name?.toLowerCase().includes(query) ||
         a.school?.toLowerCase().includes(query) ||
+        a.course?.toLowerCase().includes(query) ||
         a.email?.toLowerCase().includes(query)
       );
     });
   }, [applicants, stage, search]);
 
-  if (isLoading) {
+  if (scholarshipRequest.isLoading || applicantsRequest.isLoading) {
+    return <Loading label="Loading applicants…" />;
+  }
+
+  const error = scholarshipRequest.error || applicantsRequest.error;
+  if (error) {
+    const isMissing = error.status === 404 || error.status === 400;
     return (
-      <div className="max-w-4xl mx-auto px-4 md:px-8 py-8">
-        <p className="text-muted font-body">Loading applicants…</p>
-      </div>
+      <ErrorState
+        message={isMissing ? "This listing doesn't exist." : error.message}
+        onRetry={
+          isMissing
+            ? undefined
+            : () => {
+                scholarshipRequest.retry();
+                applicantsRequest.retry();
+              }
+        }
+      >
+        <Link to="/admin/dashboard" className={secondaryButton}>
+          Back to dashboard
+        </Link>
+      </ErrorState>
     );
   }
 
-  if (error) {
+  const scholarship = scholarshipRequest.data.scholarship;
+
+  // The server already returns an empty list for a listing you didn't post. Saying
+  // so is clearer than an empty table that looks like "nobody applied".
+  if (scholarship.posted_by !== userId) {
     return (
-      <div className="max-w-4xl mx-auto px-4 md:px-8 py-8">
-        <p className="text-deadline-urgent font-semibold">{error.message}</p>
-        <button
-          onClick={load}
-          className="mt-3 bg-primary text-white font-semibold text-sm px-4 py-2 rounded-lg cursor-pointer"
-        >
-          Retry
-        </button>
-      </div>
+      <ErrorState message="You can only see applicants for listings you posted.">
+        <Link to="/admin/dashboard" className={secondaryButton}>
+          Back to dashboard
+        </Link>
+      </ErrorState>
     );
   }
 
@@ -109,14 +103,15 @@ function AdminApplicants() {
           <p className="text-xs font-semibold text-muted">Applicants for</p>
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-1">
             <h1 className="font-display font-bold text-xl md:text-2xl text-ink">
-              {scholarship?.title}
+              {scholarship.title}
             </h1>
             <input
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search applicants..."
-              className="w-full md:w-56 bg-white border border-border rounded-lg px-4 py-2.5 text-sm font-body text-ink placeholder:text-muted shadow-sm focus:outline-none focus:border-primary"
+              aria-label="Search applicants"
+              className="w-full md:w-56 bg-white border border-border rounded-lg px-4 py-2.5 text-sm font-body text-ink placeholder:text-muted shadow-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
           </div>
         </div>
@@ -125,6 +120,7 @@ function AdminApplicants() {
         <div className="flex gap-2 mt-4 overflow-x-auto pb-1">
           <button
             onClick={() => setStage("all")}
+            aria-pressed={stage === "all"}
             className={`${chipBase} ${
               stage === "all" ? "bg-primary text-white" : "bg-chip text-primary"
             }`}
@@ -133,13 +129,16 @@ function AdminApplicants() {
           </button>
           {STAGES.map((s) => (
             <button
-              key={s}
-              onClick={() => setStage(s)}
+              key={s.key}
+              onClick={() => setStage(s.key)}
+              aria-pressed={stage === s.key}
               className={`${chipBase} ${
-                stage === s ? "bg-primary text-white" : "bg-chip text-primary"
+                stage === s.key
+                  ? "bg-primary text-white"
+                  : "bg-chip text-primary"
               }`}
             >
-              {s} · {counts[s]}
+              {s.label} · {counts[s.key]}
             </button>
           ))}
         </div>
@@ -148,15 +147,15 @@ function AdminApplicants() {
         {visible.length === 0 ? (
           <p className="text-sm text-muted mt-8">
             {applicants.length === 0
-              ? "No one has applied to this scholarship yet."
-              : "No applicants match your filters."}
+              ? "No one has saved this scholarship yet."
+              : "No applicants match your search and stage filter."}
           </p>
         ) : (
           <div className="mt-5 bg-white rounded-2xl border border-border shadow-sm overflow-x-auto">
             <div className="min-w-[560px]">
               <div className="grid grid-cols-[1.6fr_1fr_0.8fr] px-5 py-3 text-[10.5px] font-bold text-muted border-b border-border">
                 <div>APPLICANT</div>
-                <div>SCHOOL</div>
+                <div>SCHOOL &amp; COURSE</div>
                 <div>STAGE</div>
               </div>
 
@@ -171,23 +170,31 @@ function AdminApplicants() {
                     </div>
                     <div className="min-w-0">
                       <div className="font-semibold text-sm text-ink truncate">
-                        {a.name}
+                        {a.name || "No name given"}
                       </div>
-                      <div className="text-xs text-muted truncate">
+                      <a
+                        href={`mailto:${a.email}`}
+                        className="block text-xs text-muted truncate hover:text-primary hover:underline"
+                      >
                         {a.email}
-                      </div>
+                      </a>
                     </div>
                   </div>
-                  <div className="text-xs font-semibold text-muted truncate">
-                    {a.school || "—"}
+                  <div className="min-w-0 pr-3">
+                    <div className="text-xs font-semibold text-muted truncate">
+                      {a.school || "—"}
+                    </div>
+                    {a.course && (
+                      <div className="text-xs text-muted truncate">
+                        {a.course}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <span
-                      className={`text-[10.5px] font-bold px-2.5 py-1 rounded-md capitalize ${
-                        STAGE_STYLE[a.status] || "bg-chip text-muted"
-                      }`}
+                      className={`text-[10.5px] font-bold px-2.5 py-1 rounded-md bg-chip ${stageFor(a.status).text}`}
                     >
-                      {a.status}
+                      {stageFor(a.status).label}
                     </span>
                   </div>
                 </div>

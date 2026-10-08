@@ -1,114 +1,44 @@
-import { useState } from "react";
 import apiFetch from "../services/api";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import ScholarshipForm from "../components/ScholarshipForm";
 
 function NewScholarship() {
-  const [formData, setFormData] = useState({
-    title: "",
-    organization: "",
-    description: "",
-    amount: "",
-    slots: "",
-    requirements: "",
-    deadline: "",
-  });
   const navigate = useNavigate();
-  const [error, setError] = useState("");
 
-  function handleChange(e) {
-    const { name, value } = e.target;
+  // ScholarshipForm validates, builds the payload and shows any error this throws.
+  async function handleCreate(payload) {
+    await apiFetch("/scholarships", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
 
-    setFormData((prevFormData) => ({
-      ...prevFormData,
-      [name]: value,
-    }));
-  }
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-
-    try {
-      await apiFetch("/scholarships", {
-        method: "POST",
-        body: JSON.stringify(formData),
-      });
-
-      navigate("/admin/dashboard");
-    } catch (err) {
-      console.error("Adding new scholarship failed:", err);
-      setError("Something went wrong. Please try again.");
-    }
+    navigate("/admin/dashboard");
   }
 
   return (
-    <div>
-      <h1>New Scholarship Page</h1>
-      {error && <p style={{ color: "red" }}>{error}</p>}
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="title">Enter Title</label>
-        <input
-          id="title"
-          name="title"
-          value={formData.title}
-          type="text"
-          onChange={handleChange}
-        />
+    <div className="bg-background min-h-screen">
+      <div className="max-w-2xl mx-auto px-4 md:px-8 py-6 md:py-8">
+        <Link
+          to="/admin/dashboard"
+          className="text-xs font-semibold text-primary hover:underline"
+        >
+          ← Back to dashboard
+        </Link>
+        <h1 className="font-display font-bold text-2xl md:text-3xl text-ink mt-3">
+          New listing
+        </h1>
+        <p className="text-sm text-muted mt-1">
+          Students see it on the browse page as soon as you post it.
+        </p>
 
-        <label htmlFor="organization">Enter Organization</label>
-        <input
-          id="organization"
-          name="organization"
-          value={formData.organization}
-          type="text"
-          onChange={handleChange}
-        />
-
-        <label htmlFor="description">Enter Description</label>
-        <input
-          id="description"
-          name="description"
-          value={formData.description}
-          type="text"
-          onChange={handleChange}
-        />
-
-        <label htmlFor="amount">Enter Amount</label>
-        <input
-          id="amount"
-          name="amount"
-          value={formData.amount}
-          type="number"
-          onChange={handleChange}
-        />
-
-        <label htmlFor="slots">Enter Slots</label>
-        <input
-          id="slots"
-          name="slots"
-          value={formData.slots}
-          type="number"
-          onChange={handleChange}
-        />
-
-        <label htmlFor="requirements">Enter Requirements</label>
-        <input
-          id="requirements"
-          name="requirements"
-          value={formData.requirements}
-          type="text"
-          onChange={handleChange}
-        />
-
-        <label htmlFor="deadline">Enter Deadline</label>
-        <input
-          id="deadline"
-          name="deadline"
-          value={formData.deadline}
-          type="date"
-          onChange={handleChange}
-        />
-        <button type="submit">Create New Scholarship</button>
-      </form>
+        <div className="bg-white rounded-2xl border border-border shadow-sm p-5 md:p-6 mt-6">
+          <ScholarshipForm
+            submitLabel="Post scholarship"
+            submittingLabel="Posting…"
+            onSubmit={handleCreate}
+          />
+        </div>
+      </div>
     </div>
   );
 }
