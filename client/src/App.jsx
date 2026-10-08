@@ -3,6 +3,8 @@ import Login from "./pages/Login";
 import EditScholarship from "./pages/EditScholarship";
 import AdminDashboard from "./pages/AdminDashboard";
 import MyTracker from "./pages/MyTracker";
+import NewPersonalEntry from "./pages/NewPersonalEntry";
+import EditPersonalEntry from "./pages/EditPersonalEntry";
 import NewScholarship from "./pages/NewScholarship";
 import Register from "./pages/Register";
 import ScholarshipDetail from "./pages/ScholarshipDetail";
@@ -45,6 +47,22 @@ function App() {
                 element={
                   <ProtectedRoute requiredRole="student">
                     <MyTracker />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/my-tracker/new"
+                element={
+                  <ProtectedRoute requiredRole="student">
+                    <NewPersonalEntry />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/my-tracker/:id/edit"
+                element={
+                  <ProtectedRoute requiredRole="student">
+                    <EditPersonalEntry />
                   </ProtectedRoute>
                 }
               />

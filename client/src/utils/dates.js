@@ -32,6 +32,10 @@ export function deadlineStatus(scholarship, now = new Date()) {
   if (scholarship.status === "closed") {
     return { label: "Closed", isUrgent: false, isOver: true };
   }
+  // Listings always have a deadline; a scholarship the student added themselves might not.
+  if (!scholarship.deadline) {
+    return { label: "No deadline set", isUrgent: false, isOver: false };
+  }
   const days = daysUntil(scholarship.deadline, now);
   if (days < 0) {
     return { label: "Deadline passed", isUrgent: false, isOver: true };

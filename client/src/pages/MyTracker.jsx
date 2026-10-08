@@ -3,7 +3,7 @@ import apiFetch from "../services/api";
 import { useApi } from "../hooks/useApi";
 import TrackerCard from "../components/TrackerCard";
 import { ErrorState, Loading } from "../components/PageState";
-import { primaryButton } from "../components/styles";
+import { primaryButton, secondaryButton } from "../components/styles";
 import { STAGES } from "../utils/stages";
 
 function MyTracker() {
@@ -58,15 +58,22 @@ function MyTracker() {
   return (
     <div className="bg-background min-h-screen">
       <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-8">
-        <h1 className="font-display font-bold text-2xl md:text-3xl text-ink">
-          My Tracker
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-display font-bold text-2xl md:text-3xl text-ink">
+            My Tracker
+          </h1>
+          {/* for a scholarship found somewhere else, with no listing on the browse page */}
+          <Link to="/my-tracker/new" className={secondaryButton}>
+            Add your own
+          </Link>
+        </div>
 
         {applications.length === 0 ? (
           <div className="mt-8">
             <p className="text-muted">
               Nothing saved yet. Open a scholarship and choose &ldquo;Save to My
-              Tracker&rdquo; to start following your application here.
+              Tracker&rdquo;, or add one you found somewhere else, to start
+              following your application here.
             </p>
             <Link to="/scholarships" className={`${primaryButton} mt-4`}>
               Browse scholarships

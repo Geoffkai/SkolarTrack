@@ -7,7 +7,8 @@ import { STAGES, stageFor } from "../utils/stages";
 const smallButton =
   "text-xs font-semibold cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed";
 
-// One saved scholarship on the tracker board. The card owns its own little bits of UI state
+// One scholarship on the tracker board: a saved listing, or one the student added
+// themselves (is_personal). The card owns its own little bits of UI state
 // (is the note being edited? is a save in flight?); the actual API calls belong to the page,
 // which passes them in as onUpdate / onRemove.
 function TrackerCard({ application, onUpdate, onRemove }) {
@@ -70,12 +71,24 @@ function TrackerCard({ application, onUpdate, onRemove }) {
     <li
       className={`bg-white border-l-4 ${stage.bar} rounded-r-xl p-3.5 shadow-sm`}
     >
-      <Link
-        to={`/scholarships/${application.scholarship_id}`}
-        className="block font-display font-bold text-[13px] text-ink hover:underline"
-      >
-        {application.title}
-      </Link>
+      {application.is_personal ? (
+        // The student added this one themselves, so there is no listing page to link to.
+        <>
+          <span className="inline-block text-[10.5px] font-bold px-2 py-0.5 rounded-md bg-chip text-ink mb-1.5">
+            Added by you
+          </span>
+          <p className="font-display font-bold text-[13px] text-ink">
+            {application.title}
+          </p>
+        </>
+      ) : (
+        <Link
+          to={`/scholarships/${application.scholarship_id}`}
+          className="block font-display font-bold text-[13px] text-ink hover:underline"
+        >
+          {application.title}
+        </Link>
+      )}
       <p className="text-[11px] font-semibold text-muted mt-0.5">
         {application.organization}
       </p>
@@ -193,7 +206,15 @@ function TrackerCard({ application, onUpdate, onRemove }) {
             </button>
           </span>
         ) : (
-          <span className="flex items-center gap-3">
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {application.is_personal && (
+              <Link
+                to={`/my-tracker/${application.id}/edit`}
+                className={`${smallButton} text-primary`}
+              >
+                Edit details
+              </Link>
+            )}
             {!isEditingNote && (
               <button
                 onClick={startEditingNote}

@@ -74,6 +74,16 @@ describe("deadlineStatus", () => {
       "15 days left",
     );
   });
+
+  // a student's own tracker entry may not have a deadline yet; listings always do
+  test("an entry with no deadline says so instead of counting days", () => {
+    const result = deadlineStatus({ status: null, deadline: null }, at(12));
+    assert.deepEqual(result, {
+      label: "No deadline set",
+      isUrgent: false,
+      isOver: false,
+    });
+  });
 });
 
 describe("formatDate", () => {
